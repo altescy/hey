@@ -337,7 +337,7 @@ def main(prog: str | None = None) -> None:
         return
 
     if args.inputs == ["-"]:
-        args.inputs = sys.stdin.readlines()
+        args.inputs = [sys.stdin.read()]
 
     openai_client = OpenAI(
         base_url=profile.base_url,  # type: ignore[arg-type]
