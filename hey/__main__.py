@@ -69,8 +69,10 @@ def _get_prompt(client: ContextClient, context: Context) -> list[ChatCompletionM
     return prompt
 
 
-def _show_history(messages: list[ChatCompletionMessageParam]) -> None:
+def _show_history(context: Context, messages: list[ChatCompletionMessageParam]) -> None:
     console = Console()
+    console.print(f"[bold][{context.id}: {context.title}][/bold]")
+    console.print()
     for message in messages:
         role = message["role"]
         content = message["content"]
@@ -231,7 +233,7 @@ def run(prog: str | None = None) -> None:
     prompt = _get_prompt(context_client, context)
 
     if args.history:
-        _show_history(prompt)
+        _show_history(context, prompt)
         return
 
     if not args.inputs:
