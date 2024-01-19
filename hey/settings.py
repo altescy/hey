@@ -16,7 +16,7 @@ HEY_ROOT_CONTEXT_FILE: Final = HEY_ROOT_CONFIG_DIR / "context.db"
 class Profile(BaseModel):
     base_url: str | None = None
     api_key: str | None = None
-    model: str = "gpt-3.5-turbo"
+    model: str | None = None
     temperature: float | None = None
     prompt: Sequence[ChatCompletionMessageParam] = ()
 

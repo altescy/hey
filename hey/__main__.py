@@ -18,6 +18,8 @@ from hey import __version__
 from hey.context import Context, ContextClient
 from hey.settings import HEY_ROOT_CONTEXT_FILE, Profile, load_settings
 
+_DEFAULT_MODEL = "gpt-3.5-turbo"
+
 
 def _truncate_lines(text: str, max_lines: int) -> str:
     lines = text.splitlines()
@@ -178,6 +180,15 @@ def run(prog: str | None = None) -> None:
         action="append",
     )
     parser.add_argument(
+        "--model",
+        help="model name",
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=None,
+    )
+    parser.add_argument(
         "--profile",
         "-p",
         default="default",
@@ -238,9 +249,9 @@ def run(prog: str | None = None) -> None:
     response = ""
 
     completion = openai_client.chat.completions.create(
-        model=profile.model,
+        model=args.model or profile.model or _DEFAULT_MODEL,
         messages=prompt,
-        temperature=profile.temperature,
+        temperature=args.temperature or profile.temperature,
         stream=True,
     )
 
