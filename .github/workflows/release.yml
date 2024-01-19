@@ -6,9 +6,10 @@ on:
       - 'v*.*.*'
 
 jobs:
-  build-and-release:
+  test-and-release:
     runs-on: ubuntu-22.04
     steps:
+    - uses: actions/checkout@v4
 
     - name: Branch name
       id: branch_name
