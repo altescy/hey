@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "hey"
-version = "0.1.0"
+version = "0.1.0-alpha"
 description = ""
 authors = ["altescy <altescy@fastmail.com>"]
 
