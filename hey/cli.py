@@ -260,6 +260,11 @@ def main(prog: str | None = None) -> None:
         help="sampling temperature",
     )
     parser.add_argument(
+        "--no-stream",
+        action="store_true",
+        help="disable streaming",
+    )
+    parser.add_argument(
         "--profile",
         default=HYE_DEFAULT_PROFILE_NAME,
         help="profile name",
@@ -344,22 +349,31 @@ def main(prog: str | None = None) -> None:
     prompt.append(user_message)
 
     response = ""
-
-    completion = openai_client.chat.completions.create(
-        model=args.model or profile.model or HEY_DEFAULT_MODEL_NAME,
-        messages=prompt,
-        temperature=args.temperature or profile.temperature,
-        stream=True,
-    )
-
     console = Console()
     render = Text if args.plain else Markdown
-    with Live(render(response), console=console, refresh_per_second=10) as live:
-        for chunk in completion:
-            content = chunk.choices[0].delta.content
-            if content is not None:
-                response += content
-                live.update(render(response))
+    if args.no_stream:
+        result = openai_client.chat.completions.create(
+            model=args.model or profile.model or HEY_DEFAULT_MODEL_NAME,
+            messages=prompt,
+            temperature=args.temperature or profile.temperature,
+            stream=False,
+        )
+        response = result.choices[0].message.content or ""
+        console.print(render(response))
+    else:
+        stream = openai_client.chat.completions.create(
+            model=args.model or profile.model or HEY_DEFAULT_MODEL_NAME,
+            messages=prompt,
+            temperature=args.temperature or profile.temperature,
+            stream=True,
+        )
+
+        with Live(render(response), console=console, refresh_per_second=10) as live:
+            for chunk in stream:
+                content = chunk.choices[0].delta.content
+                if content is not None:
+                    response += content
+                    live.update(render(response))
 
     system_message: ChatCompletionAssistantMessageParam = {"role": "assistant", "content": response}
     with context_client:
