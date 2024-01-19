@@ -158,6 +158,10 @@ def _undo(client: ContextClient, context: Context) -> None:
         message = client.delete_last_message(context)
 
 
+def _rename_context(client: ContextClient, context: Context, new_name: str) -> None:
+    client.rename_context(context, new_name)
+
+
 def _switch_context(client: ContextClient, context: int | Context) -> None:
     if isinstance(context, int):
         _context = client.get_context(context)
@@ -217,6 +221,10 @@ def run(prog: str | None = None) -> None:
         help="delete last message and response",
     )
     parser.add_argument(
+        "--rename",
+        help="rename context",
+    )
+    parser.add_argument(
         "--model",
         help="model name",
     )
@@ -273,6 +281,10 @@ def run(prog: str | None = None) -> None:
 
     if args.undo:
         _undo(context_client, context)
+        return
+
+    if args.rename:
+        _rename_context(context_client, context, args.rename)
         return
 
     if args.history:

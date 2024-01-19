@@ -178,3 +178,16 @@ class ContextClient:
                 query = query.limit(limit)
             contexts = session.exec(query).all()
         return contexts
+
+    def rename_context(self, context: int | Context, title: str) -> Context:
+        with Session(self._engine) as session:
+            if isinstance(context, int):
+                _context = session.get(Context, context)
+                if _context is None:
+                    raise ValueError(f"Context {context} not found")
+                context = _context
+            context.title = title
+            session.add(context)
+            session.commit()
+            session.refresh(context)
+        return context
