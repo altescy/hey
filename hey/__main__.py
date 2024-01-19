@@ -47,6 +47,7 @@ def _get_context(
     if new_name is not None:
         title = new_name or datetime.datetime.now().strftime("%Y%m%d%H%M%S")
         context = client.create_context(title, profile.prompt)
+        _switch_context(client, context)
         return context
 
     if context_id is None and HEY_CURRENT_CONTEXT_FILE.exists():
@@ -147,13 +148,14 @@ def _delete_contexts(client: ContextClient, context_ids: list[int]) -> None:
         client.delete_context(context_id)
 
 
-def _switch_context(client: ContextClient, context_id: int) -> None:
-    context = client.get_context(context_id)
-    if context is None:
-        print(f"Context {context_id} not found.", file=sys.stderr)
-        sys.exit(1)
+def _switch_context(client: ContextClient, context: int | Context) -> None:
+    if isinstance(context, int):
+        _context = client.get_context(context)
+        if _context is None:
+            print(f"Context {context} not found.", file=sys.stderr)
+            sys.exit(1)
+        context = _context
     HEY_CURRENT_CONTEXT_FILE.write_text(str(context.id))
-    print(f"Switched to context {context.id}: {context.title}")
 
 
 def run(prog: str | None = None) -> None:
