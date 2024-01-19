@@ -148,6 +148,10 @@ def _delete_contexts(client: ContextClient, context_ids: list[int]) -> None:
         client.delete_context(context_id)
 
 
+def _undo(client: ContextClient, context: Context) -> None:
+    client.delete_last_message(context)
+
+
 def _switch_context(client: ContextClient, context: int | Context) -> None:
     if isinstance(context, int):
         _context = client.get_context(context)
@@ -200,6 +204,11 @@ def run(prog: str | None = None) -> None:
         "--switch",
         type=int,
         help="switch context",
+    )
+    parser.add_argument(
+        "--undo",
+        action="store_true",
+        help="delete last message",
     )
     parser.add_argument(
         "--model",
@@ -255,6 +264,10 @@ def run(prog: str | None = None) -> None:
         context_id=args.context,
     )
     prompt = _get_prompt(context_client, context)
+
+    if args.undo:
+        _undo(context_client, context)
+        return
 
     if args.history:
         _show_history(context, prompt)
