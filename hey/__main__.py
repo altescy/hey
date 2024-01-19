@@ -16,7 +16,7 @@ from rich.table import Table
 
 from hey import __version__
 from hey.context import Context, ContextClient
-from hey.settings import HEY_ROOT_CONTEXT_FILE, Profile, load_settings
+from hey.settings import HEY_CURRENT_CONTEXT_FILE, HEY_ROOT_CONTEXT_FILE, Profile, load_settings
 
 _DEFAULT_MODEL = "gpt-3.5-turbo"
 
@@ -48,6 +48,9 @@ def _get_context(
         title = new_name or datetime.datetime.now().strftime("%Y%m%d%H%M%S")
         context = client.create_context(title, profile.prompt)
         return context
+
+    if context_id is None and HEY_CURRENT_CONTEXT_FILE.exists():
+        context_id = int(HEY_CURRENT_CONTEXT_FILE.read_text())
 
     if context_id is not None:
         context_or_not = client.get_context(context_id)
@@ -144,6 +147,15 @@ def _delete_contexts(client: ContextClient, context_ids: list[int]) -> None:
         client.delete_context(context_id)
 
 
+def _switch_context(client: ContextClient, context_id: int) -> None:
+    context = client.get_context(context_id)
+    if context is None:
+        print(f"Context {context_id} not found.", file=sys.stderr)
+        sys.exit(1)
+    HEY_CURRENT_CONTEXT_FILE.write_text(str(context.id))
+    print(f"Switched to context {context.id}: {context.title}")
+
+
 def run(prog: str | None = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("inputs", nargs="*", help="input messages")
@@ -180,6 +192,12 @@ def run(prog: str | None = None) -> None:
         type=int,
         default=[],
         action="append",
+        help="delete contexts",
+    )
+    parser.add_argument(
+        "--switch",
+        type=int,
+        help="switch context",
     )
     parser.add_argument(
         "--model",
@@ -189,10 +207,10 @@ def run(prog: str | None = None) -> None:
         "--temperature",
         type=float,
         default=None,
+        help="sampling temperature",
     )
     parser.add_argument(
         "--profile",
-        "-p",
         default="default",
         help="profile name",
     )
@@ -211,6 +229,10 @@ def run(prog: str | None = None) -> None:
     profile = settings.profiles[args.profile]
 
     context_client = ContextClient(HEY_ROOT_CONTEXT_FILE)
+
+    if args.switch is not None:
+        _switch_context(context_client, args.switch)
+        return
 
     if args.delete:
         _delete_contexts(context_client, args.delete)
