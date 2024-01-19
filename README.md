@@ -59,3 +59,26 @@ options:
   --config CONFIG       path to config file
   --version             show program's version number and exit
 ```
+
+## Configuration
+
+Configuring `hey` involves setting up a configuration file.
+Through the `~/.hey/config.yml` file, users can manage their environment settings and profiles for different use cases.
+
+The config.yml file is structured as follows:
+
+```yaml
+profiles:
+  default:                              # This is the default configuration used when no --profile is explicitly specified.
+    model: gpt-4                        # Name of the model to use
+    temperature: 0                      # Sampling parameter
+
+  lmstudio:
+    base_url: http://localhost:1234/v1  # Base URL for the API
+    api_key: not-needed                 # API key
+    model: local-model                  # Model to use for this profile
+
+  ollama:
+    base_url: http://localhost:11434    # Another base URL for a different API
+    model: llama2                       # Different model for this profile
+```
