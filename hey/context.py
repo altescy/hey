@@ -105,7 +105,7 @@ class ContextClient:
             session.commit()
         return _messages
 
-    def delete_last_message(self, context: int | Context) -> None:
+    def delete_last_message(self, context: int | Context) -> Message | None:
         if isinstance(context, Context):
             assert context.id is not None
             context = context.id
@@ -113,9 +113,10 @@ class ContextClient:
             query = select(Message).where(Message.context_id == context).order_by(desc(Message.created_at))
             message = session.exec(query).first()
             if message is None:
-                return
+                return None
             session.delete(message)
             session.commit()
+        return message
 
     def get_context(self, context_id: int) -> Context | None:
         with Session(self._engine) as session:

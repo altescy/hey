@@ -146,10 +146,16 @@ def _search_contexts(client: ContextClient, query: str) -> None:
 def _delete_contexts(client: ContextClient, context_ids: list[int]) -> None:
     for context_id in context_ids:
         client.delete_context(context_id)
+    if HEY_CURRENT_CONTEXT_FILE.exists():
+        current_context_id = int(HEY_CURRENT_CONTEXT_FILE.read_text())
+        if current_context_id in context_ids:
+            HEY_CURRENT_CONTEXT_FILE.unlink()
 
 
 def _undo(client: ContextClient, context: Context) -> None:
-    client.delete_last_message(context)
+    message = client.delete_last_message(context)
+    while message is not None and message.role != "user":
+        message = client.delete_last_message(context)
 
 
 def _switch_context(client: ContextClient, context: int | Context) -> None:
@@ -208,7 +214,7 @@ def run(prog: str | None = None) -> None:
     parser.add_argument(
         "--undo",
         action="store_true",
-        help="delete last message",
+        help="delete last message and response",
     )
     parser.add_argument(
         "--model",
