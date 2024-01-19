@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/altescy/hey)](https://github.com/altescy/hey/releases)
 [![License](https://img.shields.io/github/license/altescy/hey)](https://github.com/altescy/hey/blob/main/LICENSE)
 
-`hey` is a command-line application that provides access to ChatGPT for users who prefer working within a terminal environment. 
+`hey` is a command-line application that provides access to ChatGPT for users who prefer working within a terminal environment.
 It is designed to be a non-interactive interface, meaning it processes commands one at a time rather than through continuous conversation.
 This approach is tailored for those who require quick and specific interactions with an AI model, without the inconvenience of being tied to a dialog-based interface.
 
@@ -62,7 +62,6 @@ options:
 
 ## Configuration
 
-Configuring `hey` involves setting up a configuration file.
 Through the `~/.hey/config.yml` file, users can manage their environment settings and profiles for different use cases.
 
 The config.yml file is structured as follows:
