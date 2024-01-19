@@ -12,6 +12,7 @@ HEY_ROOT_CONFIG_DIR: Final = Path.home() / ".hey"
 HEY_ROOT_CONFIG_FILE: Final = HEY_ROOT_CONFIG_DIR / "config.yml"
 HEY_ROOT_CONTEXT_FILE: Final = HEY_ROOT_CONFIG_DIR / "context.db"
 HEY_CURRENT_CONTEXT_FILE: Final = HEY_ROOT_CONFIG_DIR / "CURRENT_CONTEXT"
+HEY_DEFAULT_MODEL_NAME: Final = "gpt-3.5-turbo"
 
 
 class Profile(BaseModel):
