@@ -126,20 +126,7 @@ def run(prog: str | None = None) -> None:
     settings = load_settings(args.config)
     profile = settings.profiles[args.profile]
 
-    openai_client = OpenAI(
-        base_url=str(profile.base_url),
-        api_key=profile.api_key,
-    )
     context_client = ContextClient(HEY_ROOT_CONTEXT_FILE)
-
-    context = _get_context(
-        context_client,
-        profile,
-        create_new=args.new,
-        context_id=args.context,
-    )
-
-    prompt = _get_prompt(context_client, context)
 
     if args.search:
         _search_contexts(context_client, args.search)
@@ -149,11 +136,25 @@ def run(prog: str | None = None) -> None:
         _list_contexts(context_client)
         return
 
+    context = _get_context(
+        context_client,
+        profile,
+        create_new=args.new,
+        context_id=args.context,
+    )
+    prompt = _get_prompt(context_client, context)
+
     if args.history:
         _show_history(prompt)
+        return
 
     if not args.inputs:
         return
+
+    openai_client = OpenAI(
+        base_url=profile.base_url,  # type: ignore[arg-type]
+        api_key=profile.api_key,
+    )
 
     text = " ".join(args.inputs)
     user_message: ChatCompletionUserMessageParam = {"role": "user", "content": text}

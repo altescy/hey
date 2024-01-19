@@ -25,9 +25,10 @@ class Settings(BaseModel):
     profiles: dict[str, Profile] = {}
 
 
+_DEFAULT_PROFILE = Profile()
 _DEFAULT_SETTINGS: Final = Settings(
     profiles={
-        "default": Profile(),
+        "default": _DEFAULT_PROFILE,
     },
 )
 
@@ -41,4 +42,6 @@ def load_settings(filename: str | PathLike | None = None) -> Settings:
         filename = HEY_ROOT_CONFIG_FILE
     with open(filename) as f:
         settings = Settings.parse_obj(yaml.safe_load(f))
+        if "default" not in settings.profiles:
+            settings.profiles["default"] = _DEFAULT_PROFILE.copy()
         return settings
