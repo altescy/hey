@@ -143,12 +143,14 @@ def _search_contexts(client: ContextClient, query: str) -> None:
     console.print(table)
 
 
-def _delete_contexts(client: ContextClient, context_ids: list[int]) -> None:
-    for context_id in context_ids:
-        client.delete_context(context_id)
+def _delete_context(client: ContextClient, context: int | Context) -> None:
+    if isinstance(context, Context):
+        assert context.id is not None
+        context = context.id
+    client.delete_context(context)
     if HEY_CURRENT_CONTEXT_FILE.exists():
         current_context_id = int(HEY_CURRENT_CONTEXT_FILE.read_text())
-        if current_context_id in context_ids:
+        if current_context_id == context:
             HEY_CURRENT_CONTEXT_FILE.unlink()
 
 
@@ -205,10 +207,8 @@ def run(prog: str | None = None) -> None:
     )
     parser.add_argument(
         "--delete",
-        type=int,
-        default=[],
-        action="append",
-        help="delete contexts",
+        action="store_true",
+        help="delete context",
     )
     parser.add_argument(
         "--switch",
@@ -259,10 +259,6 @@ def run(prog: str | None = None) -> None:
         _switch_context(context_client, args.switch)
         return
 
-    if args.delete:
-        _delete_contexts(context_client, args.delete)
-        return
-
     if args.search:
         _search_contexts(context_client, args.search)
         return
@@ -289,6 +285,10 @@ def run(prog: str | None = None) -> None:
 
     if args.history:
         _show_history(context, prompt)
+        return
+
+    if args.delete:
+        _delete_context(context_client, context)
         return
 
     if not args.inputs:
