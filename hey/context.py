@@ -14,8 +14,8 @@ class Message(SQLModel, table=True):
     context_id: int = Field(foreign_key="contexts.id")
     role: str
     content: str
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
-    updated_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    created_at: datetime.datetime = Field(default_factory=datetime.datetime.now)
+    updated_at: datetime.datetime = Field(default_factory=datetime.datetime.now)
 
     context: "Context" = Relationship(back_populates="messages")
 
@@ -32,7 +32,7 @@ class Context(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     title: str
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    created_at: datetime.datetime = Field(default_factory=datetime.datetime.now)
 
     messages: list[Message] = Relationship(back_populates="context", sa_relationship_kwargs={"cascade": "all, delete"})
 
