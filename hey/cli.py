@@ -21,6 +21,7 @@ from hey.settings import (
     HEY_CURRENT_CONTEXT_FILE,
     HEY_DEFAULT_MODEL_NAME,
     HEY_ROOT_CONTEXT_FILE,
+    HYE_DEFAULT_PROFILE_NAME,
     Profile,
     init_settings,
     load_settings,
@@ -260,7 +261,7 @@ def main(prog: str | None = None) -> None:
     )
     parser.add_argument(
         "--profile",
-        default="default",
+        default=HYE_DEFAULT_PROFILE_NAME,
         help="profile name",
     )
     parser.add_argument(

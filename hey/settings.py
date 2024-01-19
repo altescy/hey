@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from os import PathLike
 from pathlib import Path
 from typing import Final, Sequence
@@ -13,6 +14,7 @@ HEY_ROOT_CONFIG_FILE: Final = HEY_ROOT_CONFIG_DIR / "config.yml"
 HEY_ROOT_CONTEXT_FILE: Final = HEY_ROOT_CONFIG_DIR / "context.db"
 HEY_CURRENT_CONTEXT_FILE: Final = HEY_ROOT_CONFIG_DIR / "CURRENT_CONTEXT"
 HEY_DEFAULT_MODEL_NAME: Final = "gpt-3.5-turbo"
+HYE_DEFAULT_PROFILE_NAME: Final = os.getenv("HEY_PROFILE", "default")
 
 
 class Profile(BaseModel):
