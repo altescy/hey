@@ -13,6 +13,7 @@ from rich.live import Live
 from rich.markdown import Markdown
 from rich.padding import Padding
 from rich.table import Table
+from rich.text import Text
 
 from hey import __version__
 from hey.context import Context, ContextClient
@@ -225,6 +226,11 @@ def run(prog: str | None = None) -> None:
         help="rename context",
     )
     parser.add_argument(
+        "--plain",
+        action="store_true",
+        help="plain text mode",
+    )
+    parser.add_argument(
         "--model",
         help="model name",
     )
@@ -316,12 +322,13 @@ def run(prog: str | None = None) -> None:
     )
 
     console = Console()
-    with Live(Markdown(response), console=console, refresh_per_second=10) as live:
+    render = Text if args.plain else Markdown
+    with Live(render(response), console=console, refresh_per_second=10) as live:
         for chunk in completion:
             content = chunk.choices[0].delta.content
             if content is not None:
                 response += content
-                live.update(Markdown(response))
+                live.update(render(response))
 
     system_message: ChatCompletionAssistantMessageParam = {"role": "assistant", "content": response}
     context_client.add_messages(context, [user_message, system_message])
