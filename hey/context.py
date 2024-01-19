@@ -31,9 +31,10 @@ class Context(SQLModel, table=True):
     __tablename__ = "contexts"
 
     id: int | None = Field(default=None, primary_key=True)
+    title: str
     created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
 
-    messages: list[Message] = Relationship(back_populates="context")
+    messages: list[Message] = Relationship(back_populates="context", sa_relationship_kwargs={"cascade": "all, delete"})
 
 
 class ContextClient:
@@ -41,12 +42,18 @@ class ContextClient:
         self._engine = create_engine(f"sqlite:///{sqlite_filename}")
         SQLModel.metadata.create_all(self._engine)
 
-    def create_context(self, prompt: Sequence[ChatCompletionMessageParam] = ()) -> Context:
+    def create_context(
+        self,
+        title: str,
+        prompt: Sequence[ChatCompletionMessageParam] = (),
+    ) -> Context:
         with Session(self._engine) as session:
-            context = Context()
+            context = Context(title=title)
             session.add(context)
             session.commit()
             session.refresh(context)
+        if prompt:
+            self.add_messages(context, prompt)
         return context
 
     def delete_context(self, context: int | Context) -> None:

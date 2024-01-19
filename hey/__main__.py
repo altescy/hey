@@ -1,4 +1,5 @@
 import argparse
+import datetime
 import sys
 
 from openai import OpenAI
@@ -18,17 +19,32 @@ from hey.context import Context, ContextClient
 from hey.settings import HEY_ROOT_CONTEXT_FILE, Profile, load_settings
 
 
+def _truncate_lines(text: str, max_lines: int) -> str:
+    lines = text.splitlines()
+    if len(lines) <= max_lines:
+        return text
+    return "\n".join(lines[: max_lines - 1]) + "..."
+
+
+def _parse_range_param(rangeparam: str) -> slice:
+    if ":" not in rangeparam or rangeparam.count(":") > 1:
+        raise ValueError("Invalid range parameter")
+    start_str, end_str = rangeparam.split(":")
+    start = int(start_str) if start_str else None
+    end = int(end_str) if end_str else None
+    return slice(start, end)
+
+
 def _get_context(
     client: ContextClient,
     profile: Profile,
     *,
-    create_new: bool = False,
+    new_name: str | None = None,
     context_id: int | None = None,
 ) -> Context:
-    if create_new:
-        context = client.create_context()
-        if profile.prompt:
-            client.add_messages(context, profile.prompt)
+    if new_name is not None:
+        title = new_name or datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        context = client.create_context(title, profile.prompt)
         return context
 
     if context_id is not None:
@@ -40,8 +56,8 @@ def _get_context(
 
     context_or_not = client.get_latest_context()
     if context_or_not is None:
-        context_or_not = client.create_context()
-        client.add_messages(context, profile.prompt)
+        title = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        context_or_not = client.create_context(title, profile.prompt)
     return context_or_not
 
 
@@ -63,18 +79,25 @@ def _show_history(messages: list[ChatCompletionMessageParam]) -> None:
         console.print()
 
 
-def _list_contexts(client: ContextClient) -> None:
+def _list_contexts(client: ContextClient, rangeparam: str) -> None:
+    slice_ = _parse_range_param(rangeparam)
+
     console = Console()
     table = Table(show_header=True, header_style="bold")
     table.add_column("ID")
+    table.add_column("Title")
     table.add_column("Summary")
     table.add_column("Created At")
 
-    for context in client.get_contexts():
+    for context in client.get_contexts()[slice_]:
         messages = client.get_messages(context, limit=3)
-        summary = "\n\n".join(f"**{message.role}**: {message.content}" for message in messages if message.content)
+        summary = _truncate_lines(
+            "\n\n".join(f"**{message.role}**: {message.content}" for message in messages if message.content),
+            max_lines=5,
+        )
         table.add_row(
             str(context.id),
+            str(context.title),
             Markdown(summary),
             str(context.created_at.strftime("%Y-%m-%d %H:%M:%S")),
         )
@@ -86,7 +109,8 @@ def _search_contexts(client: ContextClient, query: str) -> None:
     console = Console()
     table = Table(show_header=True, header_style="bold")
     table.add_column("ID")
-    table.add_column("Result")
+    table.add_column("Title")
+    table.add_column("Messages")
     table.add_column("Created At")
 
     for context in client.search_contexts(query):
@@ -103,6 +127,7 @@ def _search_contexts(client: ContextClient, query: str) -> None:
                 result += f"- **{message.role}**: {content}\n"
         table.add_row(
             str(context.id),
+            str(context.title),
             Markdown(result.strip()),
             str(context.created_at.strftime("%Y-%m-%d %H:%M:%S")),
         )
@@ -110,17 +135,63 @@ def _search_contexts(client: ContextClient, query: str) -> None:
     console.print(table)
 
 
+def _delete_contexts(client: ContextClient, context_ids: list[int]) -> None:
+    for context_id in context_ids:
+        client.delete_context(context_id)
+
+
 def run(prog: str | None = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("inputs", nargs="*", help="input messages")
-    parser.add_argument("--version", action="version", version="%(prog)s " + __version__)
-    parser.add_argument("--new", action="store_true", help="create a new context")
-    parser.add_argument("--context", type=int, help="context id")
-    parser.add_argument("--history", action="store_true", help="show history")
-    parser.add_argument("--list", action="store_true", help="list contexts")
-    parser.add_argument("--search", help="search contexts")
-    parser.add_argument("--profile", "-p", default="default")
-    parser.add_argument("--config", help="path to config file")
+    parser.add_argument(
+        "--new",
+        nargs="?",
+        const="",
+        default=None,
+        help="create a new context (with optional context name)",
+    )
+    parser.add_argument(
+        "--context",
+        type=int,
+        help="context id",
+    )
+    parser.add_argument(
+        "--history",
+        action="store_true",
+        help="show history",
+    )
+    parser.add_argument(
+        "--list",
+        nargs="?",
+        const=":",
+        default=None,
+        help="list contexts (with optional range parameter: [start:end])",
+    )
+    parser.add_argument(
+        "--search",
+        help="search contexts",
+    )
+    parser.add_argument(
+        "--delete",
+        type=int,
+        default=[],
+        action="append",
+    )
+    parser.add_argument(
+        "--profile",
+        "-p",
+        default="default",
+        help="profile name",
+    )
+    parser.add_argument(
+        "--config",
+        help="path to config file",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version="%(prog)s " + __version__,
+    )
     args = parser.parse_args()
 
     settings = load_settings(args.config)
@@ -128,18 +199,22 @@ def run(prog: str | None = None) -> None:
 
     context_client = ContextClient(HEY_ROOT_CONTEXT_FILE)
 
+    if args.delete:
+        _delete_contexts(context_client, args.delete)
+        return
+
     if args.search:
         _search_contexts(context_client, args.search)
         return
 
     if args.list:
-        _list_contexts(context_client)
+        _list_contexts(context_client, args.list)
         return
 
     context = _get_context(
         context_client,
         profile,
-        create_new=args.new,
+        new_name=args.new,
         context_id=args.context,
     )
     prompt = _get_prompt(context_client, context)

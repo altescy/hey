@@ -6,7 +6,7 @@ from typing import Final, Sequence
 
 import yaml
 from openai.types.chat import ChatCompletionMessageParam
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel
 
 HEY_ROOT_CONFIG_DIR: Final = Path.home() / ".hey"
 HEY_ROOT_CONFIG_FILE: Final = HEY_ROOT_CONFIG_DIR / "config.yml"
@@ -14,7 +14,7 @@ HEY_ROOT_CONTEXT_FILE: Final = HEY_ROOT_CONFIG_DIR / "context.db"
 
 
 class Profile(BaseModel):
-    base_url: HttpUrl | None = None
+    base_url: str | None = None
     api_key: str | None = None
     model: str = "gpt-3.5-turbo"
     temperature: float | None = None
