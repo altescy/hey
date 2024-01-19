@@ -1,5 +1,6 @@
 import datetime
 from os import PathLike
+from types import TracebackType
 from typing import Sequence, cast
 
 from openai.types.chat import ChatCompletionMessageParam, ChatCompletionRole
@@ -42,29 +43,53 @@ class ContextClient:
         self._engine = create_engine(f"sqlite:///{sqlite_filename}")
         SQLModel.metadata.create_all(self._engine)
 
+        self._internal_session: Session | None = None
+
+    def __enter__(self) -> "ContextClient":
+        if self._internal_session is not None:
+            raise RuntimeError("Already in a session")
+        self._internal_session = Session(self._engine)
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        if self._internal_session is None:
+            raise RuntimeError("Not in a session")
+        self._internal_session.close()
+        self._internal_session = None
+
+    @property
+    def _session(self) -> Session:
+        if self._internal_session is None:
+            raise RuntimeError("Not in a session")
+        return self._internal_session
+
     def create_context(
         self,
         title: str,
         prompt: Sequence[ChatCompletionMessageParam] = (),
     ) -> Context:
-        with Session(self._engine) as session:
-            context = Context(title=title)
-            session.add(context)
-            session.commit()
-            session.refresh(context)
+        context = Context(title=title)
+        self._session.add(context)
+        self._session.commit()
+        self._session.refresh(context)
         if prompt:
             self.add_messages(context, prompt)
         return context
 
-    def delete_context(self, context: int | Context) -> None:
-        with Session(self._engine) as session:
-            if isinstance(context, int):
-                _context = session.get(Context, context)
-                if _context is None:
-                    return
-                context = _context
-            session.delete(context)
-            session.commit()
+    def delete_context(self, context: int | Context) -> Context | None:
+        if isinstance(context, int):
+            _context = self._session.get(Context, context)
+            if _context is None:
+                return None
+            context = _context
+        self._session.delete(context)
+        self._session.commit()
+        return context
 
     def add_message(
         self,
@@ -77,10 +102,9 @@ class ContextClient:
                 role=message["role"],
                 content=message["content"],
             )
-        with Session(self._engine) as session:
-            session.add(message)
-            session.commit()
-            session.refresh(message)
+        self._session.add(message)
+        self._session.commit()
+        self._session.refresh(message)
         return message
 
     def add_messages(
@@ -89,44 +113,39 @@ class ContextClient:
         messages: Sequence[Message | ChatCompletionMessageParam],
     ) -> Sequence[Message]:
         assert context.id is not None
-        with Session(self._engine) as session:
-            _messages = []
-            for message in messages:
-                if not isinstance(message, Message):
-                    message = Message(
-                        name=message.get("name"),
-                        role=message["role"],
-                        content=message["content"],
-                        context_id=context.id,
-                    )
-                message.context_id = context.id
-                session.add(message)
-                _messages.append(message)
-            session.commit()
+        _messages = []
+        for message in messages:
+            if not isinstance(message, Message):
+                message = Message(
+                    name=message.get("name"),
+                    role=message["role"],
+                    content=message["content"],
+                    context_id=context.id,
+                )
+            message.context_id = context.id
+            self._session.add(message)
+            _messages.append(message)
+        self._session.commit()
         return _messages
 
     def delete_last_message(self, context: int | Context) -> Message | None:
         if isinstance(context, Context):
             assert context.id is not None
             context = context.id
-        with Session(self._engine) as session:
-            query = select(Message).where(Message.context_id == context).order_by(desc(Message.created_at))
-            message = session.exec(query).first()
-            if message is None:
-                return None
-            session.delete(message)
-            session.commit()
+        query = select(Message).where(Message.context_id == context).order_by(desc(Message.created_at))
+        message = self._session.exec(query).first()
+        if message is None:
+            return None
+        self._session.delete(message)
+        self._session.commit()
         return message
 
     def get_context(self, context_id: int) -> Context | None:
-        with Session(self._engine) as session:
-            context = session.get(Context, context_id)
-        return context
+        return self._session.get(Context, context_id)
 
     def get_latest_context(self) -> Context | None:
-        with Session(self._engine) as session:
-            query = select(Context).order_by(desc(Context.created_at))
-            context = session.exec(query).first()
+        query = select(Context).order_by(desc(Context.created_at))
+        context = self._session.exec(query).first()
         return context
 
     def get_messages(
@@ -139,13 +158,12 @@ class ContextClient:
         if isinstance(context, Context):
             assert context.id is not None
             context = context.id
-        with Session(self._engine) as session:
-            query = cast(Select[Message], select(Message).where(Message.context_id == context))
-            if offset is not None:
-                query = query.offset(offset)
-            if limit is not None:
-                query = query.limit(limit)
-            messages = session.exec(query).all()
+        query = cast(Select[Message], select(Message).where(Message.context_id == context))
+        if offset is not None:
+            query = query.offset(offset)
+        if limit is not None:
+            query = query.limit(limit)
+        messages = self._session.exec(query).all()
         return messages
 
     def get_contexts(
@@ -154,13 +172,12 @@ class ContextClient:
         offset: int | None = None,
         limit: int | None = None,
     ) -> Sequence[Context]:
-        with Session(self._engine) as session:
-            query = cast(Select[Context], select(Context))
-            if offset is not None:
-                query = query.offset(offset)
-            if limit is not None:
-                query = query.limit(limit)
-            contexts = session.exec(query).all()
+        query = cast(Select[Context], select(Context))
+        if offset is not None:
+            query = query.offset(offset)
+        if limit is not None:
+            query = query.limit(limit)
+        contexts = self._session.exec(query).all()
         return contexts
 
     def search_contexts(
@@ -170,24 +187,22 @@ class ContextClient:
         offset: int | None = None,
         limit: int | None = None,
     ) -> Sequence[Context]:
-        with Session(self._engine) as session:
-            query = cast(Select[Context], select(Context).where(select(Message).where(Message.context_id == Context.id).where(Message.content.like(f"%{text}%")).exists()))  # type: ignore[attr-defined]
-            if offset is not None:
-                query = query.offset(offset)
-            if limit is not None:
-                query = query.limit(limit)
-            contexts = session.exec(query).all()
+        query = cast(Select[Context], select(Context).where(select(Message).where(Message.context_id == Context.id).where(Message.content.like(f"%{text}%")).exists()))  # type: ignore[attr-defined]
+        if offset is not None:
+            query = query.offset(offset)
+        if limit is not None:
+            query = query.limit(limit)
+        contexts = self._session.exec(query).all()
         return contexts
 
     def rename_context(self, context: int | Context, title: str) -> Context:
-        with Session(self._engine) as session:
-            if isinstance(context, int):
-                _context = session.get(Context, context)
-                if _context is None:
-                    raise ValueError(f"Context {context} not found")
-                context = _context
-            context.title = title
-            session.add(context)
-            session.commit()
-            session.refresh(context)
+        if isinstance(context, int):
+            _context = self._session.get(Context, context)
+            if _context is None:
+                raise ValueError(f"Context {context} not found")
+            context = _context
+        context.title = title
+        self._session.add(context)
+        self._session.commit()
+        self._session.refresh(context)
         return context

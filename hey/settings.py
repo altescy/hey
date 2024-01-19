@@ -35,6 +35,10 @@ _DEFAULT_SETTINGS: Final = Settings(
 )
 
 
+def init_settings() -> None:
+    HEY_ROOT_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+
 def load_settings(filename: str | PathLike | None = None) -> Settings:
     settings: Settings
     if filename is None:
