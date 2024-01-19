@@ -294,6 +294,9 @@ def run(prog: str | None = None) -> None:
     if not args.inputs:
         return
 
+    if args.inputs == ["-"]:
+        args.inputs = sys.stdin.readlines()
+
     openai_client = OpenAI(
         base_url=profile.base_url,  # type: ignore[arg-type]
         api_key=profile.api_key,
