@@ -123,6 +123,9 @@ profiles:
   default:                              # This is the default configuration used when no --profile is explicitly specified.
     model: gpt-4                        # Name of the model to use
     temperature: 0                      # Sampling parameter
+    prompt:                             # Specify a default prompt (optional) 
+    - role: system
+      content: ...
 
   lmstudio:
     base_url: http://localhost:1234/v1  # Base URL for the API
