@@ -28,6 +28,58 @@ Key aspects of `hey` include:
 pipx install git+https://github.com/altescy/hey
 ```
 
+## Quick Start
+
+Set your `OPENAI_API_KEY` to access ChatGPT API:
+
+```shell
+export OPENAI_API_KEY=...
+```
+
+Start a new conversation (context) with `hey --new` like below.
+`[title]` is an optional argument to name the conversation:
+
+```shell
+hey --new=[title] [You can write a message here!]
+```
+
+Once you create a context, `hey` operates within that context, allowing you to continue the conversation seamlessly across different command executions:
+
+```shell
+hey [Write your response here!]
+```
+
+To view the conversation history, use:
+
+```shell
+hey --history
+```
+
+All previous conversations are stored locally, and you can list them with:
+
+```shlel
+hey --list
+```
+
+Search past conversations using a keyword:
+
+```shell
+hey --search [Keyword]
+```
+
+Switch back to a previous context like this:
+
+```shell
+hey --switch [Context ID]
+```
+
+If you no longer need a conversation, delete it with:
+
+```shell
+hey --delete --context [Context ID]
+```
+
+
 ## Usage
 
 ```text
