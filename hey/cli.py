@@ -333,18 +333,22 @@ def main(prog: str | None = None) -> None:
         _delete_context(context_client, context)
         return
 
-    if not args.inputs:
-        return
+    text = " ".join(args.inputs)
+    if not sys.stdin.isatty():
+        text_from_stdin = sys.stdin.read().strip()
+        if text:
+            text = f"{text}\n\n```\n{text_from_stdin}\n```"
+        else:
+            text = text_from_stdin
 
-    if args.inputs == ["-"]:
-        args.inputs = [sys.stdin.read()]
+    if not text:
+        return
 
     openai_client = OpenAI(
         base_url=profile.base_url,  # type: ignore[arg-type]
         api_key=profile.api_key,
     )
 
-    text = " ".join(args.inputs)
     user_message: ChatCompletionUserMessageParam = {"role": "user", "content": text}
     prompt.append(user_message)
 
