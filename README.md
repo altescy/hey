@@ -49,6 +49,13 @@ Once you create a context, `hey` operates within that context, allowing you to c
 hey [Write your response here!]
 ```
 
+You can pass contents from stdin as well:
+
+```shell
+cat prompt.txt | hey
+hey Please explain what this script do. < script.sh
+```
+
 To view the conversation history, use:
 
 ```shell
@@ -123,7 +130,7 @@ profiles:
   default:                              # This is the default configuration used when no --profile is explicitly specified.
     model: gpt-4                        # Name of the model to use
     temperature: 0                      # Sampling parameter
-    prompt:                             # Specify a default prompt (optional) 
+    prompt:                             # Specify a default prompt (optional)
     - role: system
       content: ...
 
