@@ -198,6 +198,7 @@ def main(prog: str | None = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("inputs", nargs="*", help="input messages")
     parser.add_argument(
+        "-n",
         "--new",
         nargs="?",
         const="",
@@ -205,16 +206,19 @@ def main(prog: str | None = None) -> None:
         help="create a new context (with optional context name)",
     )
     parser.add_argument(
+        "-c",
         "--context",
         type=int,
         help="context id",
     )
     parser.add_argument(
+        "-H",
         "--history",
         action="store_true",
         help="show history",
     )
     parser.add_argument(
+        "-l",
         "--list",
         nargs="?",
         const=":",
@@ -222,6 +226,7 @@ def main(prog: str | None = None) -> None:
         help="list contexts (with optional range parameter: [start:end])",
     )
     parser.add_argument(
+        "-q",
         "--search",
         help="search contexts",
     )
@@ -231,6 +236,7 @@ def main(prog: str | None = None) -> None:
         help="delete context",
     )
     parser.add_argument(
+        "-s",
         "--switch",
         type=int,
         help="switch context",
@@ -250,10 +256,12 @@ def main(prog: str | None = None) -> None:
         help="plain text mode",
     )
     parser.add_argument(
+        "-m",
         "--model",
         help="model name",
     )
     parser.add_argument(
+        "-t",
         "--temperature",
         type=float,
         default=None,
@@ -265,6 +273,7 @@ def main(prog: str | None = None) -> None:
         help="disable streaming",
     )
     parser.add_argument(
+        "-p",
         "--profile",
         default=HYE_DEFAULT_PROFILE_NAME,
         help="profile name",
@@ -274,6 +283,7 @@ def main(prog: str | None = None) -> None:
         help="path to config file",
     )
     parser.add_argument(
+        "-v",
         "--version",
         action="version",
         version="%(prog)s " + __version__,
