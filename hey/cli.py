@@ -325,7 +325,9 @@ def main(prog: str | None = None) -> None:
             return
         context = context_or_not
 
-    prompt = _get_prompt(context_client, context)
+    with context_client:
+        messages = context_client.get_messages(context)
+    prompt = [message.to_message_param() for message in messages]
 
     if args.history:
         _show_history(context, prompt)
@@ -342,6 +344,22 @@ def main(prog: str | None = None) -> None:
     if args.delete:
         _delete_context(context_client, context)
         return
+
+    if (
+        settings.suggest_new_context_after is not None
+        and messages
+        and datetime.datetime.now() - messages[-1].created_at > settings.suggest_new_context_after
+    ):
+        if (
+            input(
+                f"The last message in this context ({context.title}) was sent long ago.\n"
+                "Do you want to start a new context? [y/N]: ",
+            ).lower()
+            == "y"
+        ):
+            context = _create_context(context_client, profile, "")
+            _switch_context(context_client, context)
+            messages = []
 
     text = " ".join(args.inputs)
     if not sys.stdin.isatty():
