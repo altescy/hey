@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from datetime import timedelta
 from os import PathLike
 from pathlib import Path
 from typing import Final, Sequence
@@ -27,6 +28,7 @@ class Profile(BaseModel):
 
 class Settings(BaseModel):
     profiles: dict[str, Profile] = {}
+    suggest_new_context_after: timedelta | None = None
 
 
 _DEFAULT_PROFILE = Profile()
@@ -49,7 +51,7 @@ def load_settings(filename: str | PathLike | None = None) -> Settings:
             return settings
         filename = HEY_ROOT_CONFIG_FILE
     with open(filename) as f:
-        settings = Settings.parse_obj(yaml.safe_load(f))
+        settings = Settings(**yaml.safe_load(f))
         if "default" not in settings.profiles:
             settings.profiles["default"] = _DEFAULT_PROFILE.copy()
         return settings
