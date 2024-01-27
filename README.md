@@ -91,9 +91,8 @@ hey --delete --context [Context ID]
 
 ```text
 ❯ hey --help
-usage: hey [-h] [--new [NEW]] [--context CONTEXT] [--history] [--list [LIST]] [--search SEARCH] [--delete]
-           [--switch SWITCH] [--undo] [--rename RENAME] [--plain] [--model MODEL] [--temperature TEMPERATURE]
-           [--profile PROFILE] [--config CONFIG] [--version]
+usage: hey [-h] [-n [NEW]] [-c CONTEXT] [-H] [-l [LIST]] [-q SEARCH] [--delete] [-s SWITCH] [--undo] [--rename RENAME] [--plain] [-m MODEL] [-t TEMPERATURE]
+           [--no-stream] [-p PROFILE] [--config CONFIG] [-v]
            [inputs ...]
 
 positional arguments:
@@ -101,22 +100,30 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
-  --new [NEW]           create a new context (with optional context name)
-  --context CONTEXT     context id
-  --history             show history
-  --list [LIST]         list contexts (with optional range parameter: [start:end])
-  --search SEARCH       search contexts
+  -n [NEW], --new [NEW]
+                        create a new context (with optional context name)
+  -c CONTEXT, --context CONTEXT
+                        context id
+  -H, --history         show history
+  -l [LIST], --list [LIST]
+                        list contexts (with optional range parameter: [start:end])
+  -q SEARCH, --search SEARCH
+                        search contexts
   --delete              delete context
-  --switch SWITCH       switch context
+  -s SWITCH, --switch SWITCH
+                        switch context
   --undo                delete last message and response
   --rename RENAME       rename context
   --plain               plain text mode
-  --model MODEL         model name
-  --temperature TEMPERATURE
+  -m MODEL, --model MODEL
+                        model name
+  -t TEMPERATURE, --temperature TEMPERATURE
                         sampling temperature
-  --profile PROFILE     profile name
+  --no-stream           disable streaming
+  -p PROFILE, --profile PROFILE
+                        profile name
   --config CONFIG       path to config file
-  --version             show program's version number and exit
+  -v, --version         show program's version number and exit
 ```
 
 ## Configuration
@@ -138,8 +145,4 @@ profiles:
     base_url: http://localhost:1234/v1  # Base URL for the API
     api_key: not-needed                 # API key
     model: local-model                  # Model to use for this profile
-
-  ollama:
-    base_url: http://localhost:11434    # Another base URL for a different API
-    model: llama2                       # Different model for this profile
 ```
