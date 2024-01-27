@@ -80,13 +80,6 @@ def _get_context(
     return context_or_not
 
 
-def _get_prompt(client: ContextClient, context: Context) -> list[ChatCompletionMessageParam]:
-    with client:
-        messages = client.get_messages(context)
-    prompt = [message.to_message_param() for message in messages]
-    return prompt
-
-
 def _show_history(context: Context, messages: list[ChatCompletionMessageParam]) -> None:
     console = Console()
     console.print(f"[bold][{context.id}: {context.title}][/bold]")
