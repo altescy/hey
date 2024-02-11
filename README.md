@@ -25,7 +25,7 @@ Key aspects of `hey` include:
 ## Installation
 
 ```shell
-pipx install git+https://github.com/altescy/hey
+pipx install git+https://github.com/altescy/hey@latest
 ```
 
 ## Quick Start
