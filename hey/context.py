@@ -187,7 +187,15 @@ class ContextClient:
         offset: int | None = None,
         limit: int | None = None,
     ) -> Sequence[Context]:
-        query = cast(Select[Context], select(Context).where(select(Message).where(Message.context_id == Context.id).where(Message.content.like(f"%{text}%")).exists()))  # type: ignore[attr-defined]
+        query = cast(
+            Select[Context],
+            select(Context).where(
+                select(Message)
+                .where(Message.context_id == Context.id)
+                .where(Message.content.like(f"%{text}%"))
+                .exists()
+            ),
+        )  # type: ignore[attr-defined]
         if offset is not None:
             query = query.offset(offset)
         if limit is not None:

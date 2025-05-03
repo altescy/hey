@@ -400,6 +400,9 @@ def main(prog: str | None = None) -> None:
                     response += content
                     live.update(render(response))
 
-    system_message: ChatCompletionAssistantMessageParam = {"role": "assistant", "content": response}
+    system_message: ChatCompletionAssistantMessageParam = {
+        "role": "assistant",
+        "content": response,
+    }
     with context_client:
         context_client.add_messages(context, [user_message, system_message])
