@@ -86,7 +86,7 @@ def _show_history(context: Context, messages: list[ChatCompletionMessageParam]) 
     console.print()
     for message in messages:
         role = message["role"]
-        content = message["content"]
+        content = message.get("content")
         if not content or not isinstance(content, str):
             continue
         console.print(role, style="bold", end=":\n")

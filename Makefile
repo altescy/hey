@@ -2,6 +2,7 @@ PWD      := $(shell pwd)
 RUFF     := uv run ruff
 PYTHON   := uv run python
 PYTEST   := uv run pytest
+PYRIGHT  := uv run pyright
 MODULE   := hey
 
 .PHONY: all

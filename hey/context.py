@@ -1,7 +1,7 @@
 import datetime
 from os import PathLike
 from types import TracebackType
-from typing import Sequence, cast
+from typing import ClassVar, Sequence, cast
 
 from openai.types.chat import ChatCompletionMessageParam, ChatCompletionRole
 from sqlmodel import Field, Relationship, Session, SQLModel, create_engine, desc, select
@@ -9,7 +9,7 @@ from sqlmodel.sql.expression import Select
 
 
 class Message(SQLModel, table=True):
-    __tablename__ = "messages"
+    __tablename__: ClassVar = "messages"  # pyright: ignore[reportAssignmentType]
 
     id: int | None = Field(default=None, primary_key=True)
     context_id: int = Field(foreign_key="contexts.id")
@@ -29,7 +29,7 @@ class Message(SQLModel, table=True):
 
 
 class Context(SQLModel, table=True):
-    __tablename__ = "contexts"
+    __tablename__: ClassVar = "contexts"  # pyright: ignore[reportAssignmentType]
 
     id: int | None = Field(default=None, primary_key=True)
     title: str
@@ -57,6 +57,7 @@ class ContextClient:
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
+        del exc_type, exc_value, traceback
         if self._internal_session is None:
             raise RuntimeError("Not in a session")
         self._internal_session.close()
@@ -97,10 +98,14 @@ class ContextClient:
         message: Message | ChatCompletionMessageParam,
     ) -> Message:
         if not isinstance(message, Message):
+            role = message["role"]
+            content = message.get("content")
+            assert isinstance(content, str)
+            assert context.id is not None
             message = Message(
-                name=message.get("name"),
-                role=message["role"],
-                content=message["content"],
+                role=role,
+                content=content,
+                context_id=context.id,
             )
         self._session.add(message)
         self._session.commit()
@@ -116,10 +121,12 @@ class ContextClient:
         _messages = []
         for message in messages:
             if not isinstance(message, Message):
+                role = message["role"]
+                content = message.get("content")
+                assert isinstance(content, str)
                 message = Message(
-                    name=message.get("name"),
-                    role=message["role"],
-                    content=message["content"],
+                    role=role,
+                    content=content,
                     context_id=context.id,
                 )
             message.context_id = context.id
@@ -192,7 +199,7 @@ class ContextClient:
             select(Context).where(
                 select(Message)
                 .where(Message.context_id == Context.id)
-                .where(Message.content.like(f"%{text}%"))
+                .where(Message.content.like(f"%{text}%"))  # pyright: ignore[reportAttributeAccessIssue]
                 .exists()
             ),
         )  # type: ignore[attr-defined]
