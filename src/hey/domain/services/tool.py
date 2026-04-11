@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import typing
 from collections.abc import Awaitable, Callable
@@ -46,6 +47,10 @@ def generate_tool_definition_from_spec(spec: ToolSpec) -> ToolDefinition:
         description=spec.description,
         parameters=generate_json_schema(spec.func),
     )
+
+
+def override_tool_permission(spec: ToolSpec, permission: ToolParamPermission) -> ToolSpec:
+    return dataclasses.replace(spec, permission=permission)
 
 
 def construct_tool_parameters_from_json(

@@ -1,4 +1,3 @@
-import dataclasses
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -19,7 +18,7 @@ from hey.domain.services.llm import (
     LLMAgentUpdater,
     append_user_message,
 )
-from hey.domain.services.tool import generate_tool_definition_from_spec
+from hey.domain.services.tool import generate_tool_definition_from_spec, override_tool_permission
 
 
 class AgentChatUseCase:
@@ -37,7 +36,7 @@ class AgentChatUseCase:
         tool_specs = {spec.name: spec for spec in self._tool_repository.get_all_specs()}
         for tool_name, tool_spec in tool_specs.items():
             if param_permission := permission.get(tool_name):
-                tool_specs[tool_name] = dataclasses.replace(tool_spec, permission=param_permission)
+                tool_specs[tool_name] = override_tool_permission(tool_spec, param_permission)
 
         self._agent_reducer = LLMAgentReducer()
         self._agent_updater = LLMAgentUpdater()

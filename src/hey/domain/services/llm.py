@@ -144,20 +144,18 @@ class LLMAgentInterpreter:
             args_json = cmd.record["args_json"]
             status: Literal["success", "error", "denied"]
 
-            try:
-                if (
-                    next(
-                        (
-                            action
-                            for pattern, action in reversed(list(tool_spec.permission.items()))
-                            if json_match(args_json, pattern)
-                        ),
-                        "allow",
-                    )
-                    == "deny"
-                ):
-                    raise ToolCallDenied("tool call denied by permission")
+            permission_action = next(
+                (
+                    action
+                    for pattern, action in reversed(list(tool_spec.permission.items()))
+                    if json_match(args_json, pattern)
+                ),
+                "allow",
+            )
 
+            try:
+                if permission_action == "deny":
+                    raise ToolCallDenied("tool call denied by permission")
                 params = construct_tool_parameters_from_json(tool_spec, args_json)
                 result = await tool_spec.func(**params)
                 message = ToolResultMessage(
@@ -174,7 +172,6 @@ class LLMAgentInterpreter:
                 )
                 status = "denied"
             except Exception as exc:
-                print(exc, args_json)
                 message = ToolResultMessage(
                     role="tool_result",
                     tool_call_id=cmd.record["id"],
