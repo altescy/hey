@@ -133,6 +133,7 @@ class EmitLLMMessage:
 @dataclasses.dataclass(frozen=True)
 class EmitToolResult:
     message: ToolResultMessage
+    status: Literal["success", "error"]
 
 
 type LLMEvent = EmitLLMSignal | EmitLLMMessage | EmitToolResult

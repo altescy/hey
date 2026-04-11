@@ -93,13 +93,14 @@ async def _run_chat(prompt: str) -> None:
                                         status = console.status(_render_tool_call(record))
                                         stack.enter_context(status)
                                         tool_calls[record["id"]] = (record, status)
-                    case EmitToolResult(message=message):
+                    case EmitToolResult(message=message, status=tool_call_status):
                         tool_call = tool_calls.pop(message["tool_call_id"], None)
                         if tool_call is not None:
                             record, status = tool_call
                             result = _render_message(message, width=60)
                             status.stop()
-                            console.print(f"[green]✔[/green] {_render_tool_call(record)}")
+                            icon = "[green]✔[/green]" if tool_call_status == "success" else "[red]✘[/red]"
+                            console.print(f"{icon} {_render_tool_call(record)}")
                             console.print(f"    [dim]╰─ {result}[/dim]\n")
 
     await response.collect()

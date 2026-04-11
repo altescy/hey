@@ -10,7 +10,7 @@ def _create_bash_tool_spec() -> ToolSpec:
         """Execute a bash command and return its output."""
         result = subprocess.run(command, shell=True, capture_output=True, text=True)
         if result.returncode != 0:
-            return f"Error: {result.stderr.strip()}"
+            raise RuntimeError(f"Command failed with exit code {result.returncode}: {result.stderr.strip()}")
         return result.stdout.strip()
 
     return generate_tool_spec_from_callable(

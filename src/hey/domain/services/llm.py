@@ -2,7 +2,7 @@ import asyncio
 import contextvars
 import dataclasses
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Literal
 
 from hey.core.agent import Reducer
 from hey.domain.entities.llm import (
@@ -138,6 +138,7 @@ class LLMAgentInterpreter:
 
         async def _execute(cmd: RunToolCall) -> EmitToolResult:
             tool_spec = self._tool_repository.get_spec_by_name(cmd.tool["name"])
+            status: Literal["success", "error"]
             try:
                 params = construct_tool_parameters_from_json(tool_spec, cmd.record["args_json"])
                 result = await tool_spec.func(**params)
@@ -146,13 +147,15 @@ class LLMAgentInterpreter:
                     tool_call_id=cmd.record["id"],
                     parts=(TextContent(type="text", text=dump_tool_result_to_json(result)),),
                 )
+                status = "success"
             except Exception as exc:
                 message = ToolResultMessage(
                     role="tool_result",
                     tool_call_id=cmd.record["id"],
                     parts=(TextContent(type="text", text=f"Error: tool '{cmd.record['name']}' failed: {exc}"),),
                 )
-            return EmitToolResult(message=message)
+                status = "error"
+            return EmitToolResult(message=message, status=status)
 
         token = _LLM_STATE.set(state)
 
