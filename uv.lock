@@ -434,6 +434,7 @@ source = { editable = "." }
 dependencies = [
     { name = "colt" },
     { name = "pydantic" },
+    { name = "rich" },
 ]
 
 [package.optional-dependencies]
@@ -454,6 +455,7 @@ requires-dist = [
     { name = "colt", specifier = ">=0.18.1" },
     { name = "litellm", marker = "extra == 'litellm'", specifier = ">=1.83.4" },
     { name = "pydantic", specifier = ">=2.12.5" },
+    { name = "rich", specifier = ">=14.3.4" },
 ]
 provides-extras = ["litellm"]
 

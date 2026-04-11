@@ -10,6 +10,7 @@ requires-python = ">=3.12"
 dependencies = [
     "colt>=0.18.1",
     "pydantic>=2.12.5",
+    "rich>=14.3.4",
 ]
 
 [project.scripts]
