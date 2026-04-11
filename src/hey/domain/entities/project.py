@@ -3,7 +3,7 @@ from typing import NewType
 
 from pydantic import BaseModel
 
-from hey.domain.entities.config import HeyConfig
+from .config import HeyConfig
 
 ProjectID = NewType("ProjectID", str)
 
