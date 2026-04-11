@@ -2,7 +2,7 @@ import argparse
 
 from hey.version import VERSION
 
-from .commands.chat import run_chat
+from .commands import chat, show_chat_history
 
 
 def build_parser(*, prog: str | None = None) -> argparse.ArgumentParser:
@@ -13,8 +13,12 @@ def build_parser(*, prog: str | None = None) -> argparse.ArgumentParser:
 
 def main(prog: str | None = None) -> None:
     parser = build_parser(prog=prog)
-    parser.add_argument("prompt", nargs="+", help="The prompt to send to the LLM.")
+    parser.add_argument("prompt", nargs="*", help="The prompt to send to the LLM.")
+    parser.add_argument("--show", choices=["chat-history"], help="Show additional information.")
     args = parser.parse_args()
 
-    prompt = " ".join(args.prompt)
-    run_chat(prompt=prompt)
+    if args.show == "chat-history":
+        show_chat_history.run(args)
+        return
+
+    chat.run(args)

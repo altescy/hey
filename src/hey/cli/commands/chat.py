@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import json
 import textwrap
@@ -110,5 +111,6 @@ async def _run_chat(prompt: str) -> None:
     await response.collect()
 
 
-def run_chat(prompt: str) -> None:
+def run(args: argparse.Namespace) -> None:
+    prompt = " ".join(args.prompt)
     asyncio.run(_run_chat(prompt))
