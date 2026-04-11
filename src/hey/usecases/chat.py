@@ -32,10 +32,13 @@ class AgentChatUseCase:
         self._llm_spec = llm_spec
         self._chat_repository = chat_repository
         self._tool_repository = tool_repository
+
+        tool_specs = {spec.name: spec for spec in self._tool_repository.get_all_specs()}
+
         self._agent_reducer = LLMAgentReducer()
         self._agent_updater = LLMAgentUpdater()
-        self._agent_interpreter = LLMAgentInterpreter(self._tool_repository)
-        self._agent_finalizer = LLMAgentFinalizer(self._tool_repository)
+        self._agent_interpreter = LLMAgentInterpreter(tool_specs)
+        self._agent_finalizer = LLMAgentFinalizer(tool_specs)
 
     async def get_llm_state(self, session_id: ChatSessionID) -> LLMState:
         tool_specs = self._tool_repository.get_all_specs()

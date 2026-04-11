@@ -8,7 +8,7 @@ from rich.live import Live
 from rich.markdown import Markdown
 from rich.status import Status
 
-from hey.domain.entities.llm import EmitLLMSignal, EmitLLMMessage, EmitToolResult, LLMMessage, ToolCallRecord
+from hey.domain.entities.llm import EmitLLMMessage, EmitLLMSignal, EmitToolResult, LLMMessage, ToolCallRecord
 from hey.infrastructure.chat import InMemoryChatRepository
 from hey.infrastructure.llm import get_litellm_spec
 from hey.infrastructure.project import TemporaryProjectRepository

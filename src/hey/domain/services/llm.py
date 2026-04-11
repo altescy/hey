@@ -1,7 +1,7 @@
 import asyncio
 import contextvars
 import dataclasses
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
 from hey.core.agent import Reducer
@@ -21,7 +21,7 @@ from hey.domain.entities.llm import (
     ToolResultMessage,
     UserMessage,
 )
-from hey.domain.repositories.tool import IToolRepository
+from hey.domain.entities.tool import ToolSpec
 from hey.domain.services.tool import (
     construct_tool_parameters_from_json,
     construct_tool_result_from_json,
@@ -129,15 +129,15 @@ class LLMAgentUpdater:
 
 
 class LLMAgentInterpreter:
-    def __init__(self, tool_repository: IToolRepository) -> None:
-        self._tool_repository = tool_repository
+    def __init__(self, tool_specs: Mapping[str, ToolSpec]) -> None:
+        self._tool_specs = tool_specs
 
     async def __call__(self, cmds: Sequence[RunToolCall], state: LLMState) -> list[EmitToolResult]:
         if not cmds:
             return []
 
         async def _execute(cmd: RunToolCall) -> EmitToolResult:
-            tool_spec = self._tool_repository.get_spec_by_name(cmd.tool["name"])
+            tool_spec = self._tool_specs[cmd.tool["name"]]
             status: Literal["success", "error"]
             try:
                 params = construct_tool_parameters_from_json(tool_spec, cmd.record["args_json"])
@@ -169,8 +169,8 @@ class LLMAgentInterpreter:
 
 
 class LLMAgentFinalizer:
-    def __init__(self, tool_repository: IToolRepository) -> None:
-        self._tool_repository = tool_repository
+    def __init__(self, tool_specs: Mapping[str, ToolSpec]) -> None:
+        self._tool_specs = tool_specs
 
     def is_done(self, state: LLMState) -> bool:
         if not state.history:
@@ -209,5 +209,5 @@ class LLMAgentFinalizer:
             raise RuntimeError("final result is not available until the agent is finalized")
 
         result_json = "".join(part["text"] for part in final_message["parts"])
-        finalizer_spec = self._tool_repository.get_spec_by_name(state.finalizer["name"])
+        finalizer_spec = self._tool_specs[state.finalizer["name"]]
         return construct_tool_result_from_json(finalizer_spec, result_json)
