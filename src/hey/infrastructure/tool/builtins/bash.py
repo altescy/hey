@@ -16,5 +16,5 @@ def create_bash_tool_spec() -> ToolSpec:
         bash,
         name="bash",
         description="Execute a bash command and return its output.",
-        permission={"command.*": "deny", "command.ls *": "allow"},
+        permission={"command.*": "ask", "command.ls *": "allow"},
     )

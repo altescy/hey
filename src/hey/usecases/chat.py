@@ -6,7 +6,7 @@ from hey.core.workflow import WorkflowResponse
 from hey.domain.entities.chat import ChatSession, ChatSessionID
 from hey.domain.entities.llm import LLMEvent, LLMSpec, LLMState
 from hey.domain.entities.project import ProjectID
-from hey.domain.entities.tool import ToolPermission
+from hey.domain.entities.tool import AskPermissionFunc, ToolPermission
 from hey.domain.repositories.chat import IChatRepository
 from hey.domain.repositories.tool import IToolRepository
 from hey.domain.services.llm import (
@@ -18,7 +18,7 @@ from hey.domain.services.llm import (
     LLMAgentUpdater,
     append_user_message,
 )
-from hey.domain.services.tool import generate_tool_definition_from_spec, override_tool_permission
+from hey.domain.services.tool import generate_tool_definition_from_spec, override_tool_permission, set_ask_permission
 
 
 class AgentChatUseCase:
@@ -28,6 +28,7 @@ class AgentChatUseCase:
         llm_spec: LLMSpec,
         chat_repository: IChatRepository,
         tool_repository: IToolRepository,
+        ask_permission: AskPermissionFunc | None = None,
     ) -> None:
         self._llm_spec = llm_spec
         self._chat_repository = chat_repository
@@ -36,7 +37,10 @@ class AgentChatUseCase:
         tool_specs = {spec.name: spec for spec in self._tool_repository.get_all_specs()}
         for tool_name, tool_spec in tool_specs.items():
             if param_permission := permission.get(tool_name):
-                tool_specs[tool_name] = override_tool_permission(tool_spec, param_permission)
+                tool_spec = override_tool_permission(tool_spec, param_permission)
+            if ask_permission is not None:
+                tool_spec = set_ask_permission(tool_specs[tool_name], ask_permission)
+            tool_specs[tool_name] = tool_spec
 
         self._agent_reducer = LLMAgentReducer()
         self._agent_updater = LLMAgentUpdater()

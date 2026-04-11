@@ -154,8 +154,13 @@ class LLMAgentInterpreter:
             )
 
             try:
-                if permission_action == "deny":
+                if permission_action in "ask":
+                    if tool_spec.ask_permission is None:
+                        raise ToolCallDenied("tool call denied because permission is required but not configured")
+                    permission_action = await tool_spec.ask_permission(cmd.record)
+                if permission_action != "allow":
                     raise ToolCallDenied("tool call denied by permission")
+
                 params = construct_tool_parameters_from_json(tool_spec, args_json)
                 result = await tool_spec.func(**params)
                 message = ToolResultMessage(

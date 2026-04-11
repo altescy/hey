@@ -10,7 +10,7 @@ from pydantic import TypeAdapter
 
 from hey.core.schema import generate_function_signature, generate_json_schema
 from hey.domain.entities.llm import ToolDefinition
-from hey.domain.entities.tool import ToolName, ToolParamPermission, ToolSpec
+from hey.domain.entities.tool import AskPermissionFunc, ToolName, ToolParamPermission, ToolSpec
 
 _TOOL_RETURN_TA: Final = TypeAdapter(
     Any,
@@ -51,6 +51,10 @@ def generate_tool_definition_from_spec(spec: ToolSpec) -> ToolDefinition:
 
 def override_tool_permission(spec: ToolSpec, permission: ToolParamPermission) -> ToolSpec:
     return dataclasses.replace(spec, permission=permission)
+
+
+def set_ask_permission(spec: ToolSpec, ask_permission: AskPermissionFunc) -> ToolSpec:
+    return dataclasses.replace(spec, ask_permission=ask_permission)
 
 
 def construct_tool_parameters_from_json(
