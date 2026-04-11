@@ -27,13 +27,14 @@ class EventSource[EventT]:
                 raise RuntimeError("EventSource is already closed")
             self._history.append(event)
             queues = list(self._queues)
-        for q in queues:
-            if q.full():
-                if self._slow_subscriber_policy == "ERROR":
-                    raise RuntimeError(f"Subscriber queue is full (max_buffer={self._max_buffer})")
-                # DROP: skip delivery to this subscriber
-            else:
-                q.put_nowait(event)
+
+            for q in queues:
+                if q.full():
+                    if self._slow_subscriber_policy == "ERROR":
+                        raise RuntimeError(f"Subscriber queue is full (max_buffer={self._max_buffer})")
+                    # DROP: skip delivery to this subscriber
+                else:
+                    q.put_nowait(event)
 
     @asynccontextmanager
     async def subscribe(self, replay: int = 0) -> AsyncIterator[AsyncIterator[EventT]]:

@@ -82,8 +82,8 @@ class WorkflowGraph[StateT, EventT, TerminalT]:
         map_state: Callable[[StateT], ChildStateT],
         inject_event: Callable[[ChildEventT], EventT],
         deps: Sequence[str] = (),
-        cond: Callable[[StateT], bool] | None = None,
-        until: Callable[[StateT], bool] = ...,
+        cond: Callable[[StateT], bool] | None = ...,
+        until: Callable[[StateT], bool] | None = ...,
     ) -> Self: ...
 
     def add(
@@ -98,8 +98,8 @@ class WorkflowGraph[StateT, EventT, TerminalT]:
         map_state = cast(Callable[[StateT], object] | None, kwargs.pop("map_state", None))
         inject_event = cast(Callable[[object], EventT] | None, kwargs.pop("inject_event", None))
         deps = cast(Sequence[str], kwargs.pop("deps", ()))
-        cond = cast(Callable[[StateT], bool] | None, kwargs.pop("cond", (lambda _: True)))
-        until = cast(Callable[[StateT], bool], kwargs.pop("until", (lambda _: True)))
+        cond = cast(Callable[[StateT], bool] | None, kwargs.pop("cond", None))
+        until = cast(Callable[[StateT], bool] | None, kwargs.pop("until", None))
 
         if kwargs:
             unknown_keys = ", ".join(sorted(kwargs.keys()))
