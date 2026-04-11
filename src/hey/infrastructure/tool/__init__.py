@@ -1,3 +1,3 @@
-from .builtin import BuiltinToolRepository
+from .repositories import BuiltinToolRepository
 
 __all__ = ["BuiltinToolRepository"]

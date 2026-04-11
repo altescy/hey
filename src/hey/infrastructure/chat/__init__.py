@@ -1,4 +1,4 @@
-from .inmemory_repository import InMemoryChatRepository
+from .repositories import InMemoryChatRepository
 
 __all__ = [
     "InMemoryChatRepository",

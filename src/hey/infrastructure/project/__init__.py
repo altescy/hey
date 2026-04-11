@@ -1,3 +1,3 @@
-from .local import LocalProjectRepository
+from .repositories import LocalProjectRepository
 
 __all__ = ["LocalProjectRepository"]
