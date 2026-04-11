@@ -3,9 +3,12 @@ from typing import NewType
 
 from pydantic import BaseModel
 
-ProjectID = NewType("ProjectID", int)
+from hey.domain.entities.config import HeyConfig
+
+ProjectID = NewType("ProjectID", str)
 
 
 class Project(BaseModel):
     id: ProjectID
     directory: Path
+    config: HeyConfig

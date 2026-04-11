@@ -1,3 +1,3 @@
-from .temporary import TemporaryProjectRepository
+from .local import LocalProjectRepository
 
-__all__ = ["TemporaryProjectRepository"]
+__all__ = ["LocalProjectRepository"]

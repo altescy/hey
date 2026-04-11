@@ -11,7 +11,7 @@ from rich.status import Status
 from hey.domain.entities.llm import EmitLLMMessage, EmitLLMSignal, EmitToolResult, LLMMessage, ToolCallRecord
 from hey.infrastructure.chat import InMemoryChatRepository
 from hey.infrastructure.llm import get_litellm_spec
-from hey.infrastructure.project import TemporaryProjectRepository
+from hey.infrastructure.project import LocalProjectRepository
 from hey.infrastructure.tool import BuiltinToolRepository
 from hey.usecases.chat import AgentChatUseCase
 from hey.usecases.project import ProjectUseCase
@@ -53,14 +53,18 @@ def _render_tool_call(
 
 async def _run_chat(prompt: str) -> None:
     project_use_case = ProjectUseCase(
-        project_repository=TemporaryProjectRepository(),
+        project_repository=LocalProjectRepository(),
     )
+    project = project_use_case.get_project(path=".")
+
     chat_use_case = AgentChatUseCase(
-        llm_spec=get_litellm_spec(model="gpt-5.2", instructions="You are a helpful assistant."),
+        llm_spec=get_litellm_spec(
+            model=project.config.chat.model,
+            instructions=project.config.chat.instructions,
+        ),
         chat_repository=InMemoryChatRepository(),
         tool_repository=BuiltinToolRepository(),
     )
-    project = project_use_case.get_project(path=".")
     session = await chat_use_case.create_session(project_id=project.id)
 
     console = Console()
