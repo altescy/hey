@@ -102,8 +102,6 @@ async def _run_chat(prompt: str) -> None:
                             console.print(f"[green]✔[/green] {_render_tool_call(record)}")
                             console.print(f"    [dim]╰─ {result}[/dim]\n")
 
-            print()
-
     await response.collect()
 
 
