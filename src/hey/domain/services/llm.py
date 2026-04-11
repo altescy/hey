@@ -137,7 +137,6 @@ class LLMAgentInterpreter:
             return []
 
         async def _execute(cmd: RunToolCall) -> EmitToolResult:
-            print(f"Executing tool call: {cmd.record['name']} with args {cmd.record['args_json']}")
             tool_spec = self._tool_repository.get_spec_by_name(cmd.tool["name"])
             try:
                 params = construct_tool_parameters_from_json(tool_spec, cmd.record["args_json"])
