@@ -3,6 +3,7 @@ import asyncio
 import json
 import textwrap
 from contextlib import ExitStack
+from typing import Literal, assert_never
 
 from rich.console import Console
 from rich.live import Live
@@ -50,6 +51,18 @@ def _render_tool_call(
         f"{key}={_render_text(json.dumps(val), width=10)}" for key, val in json.loads(record["args_json"]).items()
     )
     return _render_text(f"[bold]{name}[/bold]: {params}", width=width)
+
+
+def _get_tool_call_status_icon(status: Literal["success", "error", "denied"]) -> str:
+    match status:
+        case "success":
+            return "[green]✔[/green]"
+        case "error":
+            return "[red]✘[/red]"
+        case "denied":
+            return "[yellow]⚠[/yellow]"
+        case _:
+            assert_never(status)
 
 
 async def _run_chat(prompt: str) -> None:
@@ -104,7 +117,7 @@ async def _run_chat(prompt: str) -> None:
                             record, status = tool_call
                             result = _render_message(message, width=60)
                             status.stop()
-                            icon = "[green]✔[/green]" if tool_call_status == "success" else "[red]✘[/red]"
+                            icon = _get_tool_call_status_icon(tool_call_status)
                             console.print(f"{icon} {_render_tool_call(record)}")
                             console.print(f"    [dim]╰─ {result}[/dim]\n")
 

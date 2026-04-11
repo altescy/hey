@@ -5,6 +5,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
 from hey.core.agent import Reducer
+from hey.core.pattern import json_match
 from hey.domain.entities.llm import (
     AssistantMessage,
     ContentPart,
@@ -21,7 +22,8 @@ from hey.domain.entities.llm import (
     ToolResultMessage,
     UserMessage,
 )
-from hey.domain.entities.tool import ToolSpec
+from hey.domain.entities.tool import ToolName, ToolSpec
+from hey.domain.exceptions.tool import ToolCallDenied
 from hey.domain.services.tool import (
     construct_tool_parameters_from_json,
     construct_tool_result_from_json,
@@ -129,7 +131,7 @@ class LLMAgentUpdater:
 
 
 class LLMAgentInterpreter:
-    def __init__(self, tool_specs: Mapping[str, ToolSpec]) -> None:
+    def __init__(self, tool_specs: Mapping[ToolName, ToolSpec]) -> None:
         self._tool_specs = tool_specs
 
     async def __call__(self, cmds: Sequence[RunToolCall], state: LLMState) -> list[EmitToolResult]:
@@ -137,10 +139,26 @@ class LLMAgentInterpreter:
             return []
 
         async def _execute(cmd: RunToolCall) -> EmitToolResult:
-            tool_spec = self._tool_specs[cmd.tool["name"]]
-            status: Literal["success", "error"]
+            tool_name = ToolName(cmd.tool["name"])
+            tool_spec = self._tool_specs[tool_name]
+            args_json = cmd.record["args_json"]
+            status: Literal["success", "error", "denied"]
+
             try:
-                params = construct_tool_parameters_from_json(tool_spec, cmd.record["args_json"])
+                if (
+                    next(
+                        (
+                            action
+                            for pattern, action in reversed(list(tool_spec.permission.items()))
+                            if json_match(args_json, pattern)
+                        ),
+                        "allow",
+                    )
+                    == "deny"
+                ):
+                    raise ToolCallDenied("tool call denied by permission")
+
+                params = construct_tool_parameters_from_json(tool_spec, args_json)
                 result = await tool_spec.func(**params)
                 message = ToolResultMessage(
                     role="tool_result",
@@ -148,7 +166,15 @@ class LLMAgentInterpreter:
                     parts=(TextContent(type="text", text=dump_tool_result_to_json(result)),),
                 )
                 status = "success"
+            except ToolCallDenied as exc:
+                message = ToolResultMessage(
+                    role="tool_result",
+                    tool_call_id=cmd.record["id"],
+                    parts=(TextContent(type="text", text=f"Error: tool call denied: {exc}"),),
+                )
+                status = "denied"
             except Exception as exc:
+                print(exc, args_json)
                 message = ToolResultMessage(
                     role="tool_result",
                     tool_call_id=cmd.record["id"],
@@ -169,7 +195,7 @@ class LLMAgentInterpreter:
 
 
 class LLMAgentFinalizer:
-    def __init__(self, tool_specs: Mapping[str, ToolSpec]) -> None:
+    def __init__(self, tool_specs: Mapping[ToolName, ToolSpec]) -> None:
         self._tool_specs = tool_specs
 
     def is_done(self, state: LLMState) -> bool:
@@ -209,5 +235,5 @@ class LLMAgentFinalizer:
             raise RuntimeError("final result is not available until the agent is finalized")
 
         result_json = "".join(part["text"] for part in final_message["parts"])
-        finalizer_spec = self._tool_specs[state.finalizer["name"]]
+        finalizer_spec = self._tool_specs[ToolName(state.finalizer["name"])]
         return construct_tool_result_from_json(finalizer_spec, result_json)
