@@ -29,14 +29,12 @@ def _render_text(o: object, *, width: int | None = None, escape: bool = True) ->
     return text
 
 
-def _render_message(message: LLMMessage, *, width: int | None = None, escape: bool = True) -> str:
+def _render_llm_message(message: LLMMessage, *, width: int | None = None, escape: bool = True) -> str:
     return _render_text("".join(part["text"] for part in message["parts"]), width=width, escape=escape)
 
 
 def _render_tool_call(record: ToolCallRecord, *, width: int | None = None) -> str:
-    params = ", ".join(
-        f"{key}={_render_text(json.dumps(val), width=10)}" for key, val in json.loads(record["args_json"]).items()
-    )
+    params = ", ".join(f"{key}={_render_text(json.dumps(val))}" for key, val in json.loads(record["args_json"]).items())
     return _render_text(f"[bold]{record['name']}[/bold]: {params}", width=width)
 
 
@@ -50,6 +48,13 @@ def _tool_call_status_icon(status: Literal["success", "error", "denied"]) -> str
             return "[yellow]⚠[/yellow]"
         case _:
             assert_never(status)
+
+
+def _get_console_width(console: Console) -> int:
+    try:
+        return console.size.width
+    except Exception:
+        return 80
 
 
 class ChatDisplay:
@@ -89,7 +94,7 @@ class ChatDisplay:
         self._refresh()
 
     def commit_message(self, message: LLMMessage) -> None:
-        self._live.console.print(Markdown(_render_message(message, escape=False)))
+        self._live.console.print(Markdown(_render_llm_message(message, escape=False)))
         self._markdown = Markdown("")
         self._pending.clear()
         self._refresh()
@@ -100,14 +105,16 @@ class ChatDisplay:
         self._refresh()
 
     def finish_tool_call(
-        self, tool_call_id: str, result_text: str, status: Literal["success", "error", "denied"]
+        self, tool_call_id: str, result: LLMMessage, status: Literal["success", "error", "denied"]
     ) -> None:
         entry = self._pending.pop(tool_call_id, None)
         if entry is None:
             return
         record, _ = entry
         self._live.console.print(f"{_tool_call_status_icon(status)} {_render_tool_call(record)}")
-        self._live.console.print(f"    [dim]╰─ {result_text}[/dim]\n")
+        self._live.console.print(
+            f"    [dim]╰─ {_render_llm_message(result, width=_get_console_width(self._console) - 6)}[/dim]\n"
+        )
         self._refresh()
 
 
@@ -157,11 +164,7 @@ async def _run_chat(prompt: str) -> None:
                             for record in message["tool_calls"]:
                                 display.add_pending_tool_call(record)
                     case EmitToolResult(message=message, status=status):
-                        display.finish_tool_call(
-                            message["tool_call_id"],
-                            _render_message(message, width=60),
-                            status,
-                        )
+                        display.finish_tool_call(message["tool_call_id"], message, status)
 
     await response.collect()
 

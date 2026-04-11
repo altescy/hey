@@ -154,7 +154,7 @@ class LLMAgentInterpreter:
             )
 
             try:
-                if permission_action in "ask":
+                if permission_action == "ask":
                     if tool_spec.ask_permission is None:
                         raise ToolCallDenied("tool call denied because permission is required but not configured")
                     permission_action = await tool_spec.ask_permission(cmd.record)
@@ -176,6 +176,8 @@ class LLMAgentInterpreter:
                     parts=(TextContent(type="text", text=f"Error: tool call denied: {exc}"),),
                 )
                 status = "denied"
+            except (KeyboardInterrupt, EOFError):
+                raise
             except Exception as exc:
                 message = ToolResultMessage(
                     role="tool_result",

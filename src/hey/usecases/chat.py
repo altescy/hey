@@ -39,7 +39,7 @@ class AgentChatUseCase:
             if param_permission := permission.get(tool_name):
                 tool_spec = override_tool_permission(tool_spec, param_permission)
             if ask_permission is not None:
-                tool_spec = set_ask_permission(tool_specs[tool_name], ask_permission)
+                tool_spec = set_ask_permission(tool_spec, ask_permission)
             tool_specs[tool_name] = tool_spec
 
         self._agent_reducer = LLMAgentReducer()

@@ -1,16 +1,22 @@
+import asyncio
+
 from hey.domain.entities.tool import ToolSpec
 from hey.domain.services.tool import generate_tool_spec_from_callable
 
 
 def create_bash_tool_spec() -> ToolSpec:
-    import subprocess
-
     async def bash(command: str) -> str:
         """Execute a bash command and return its output."""
-        result = subprocess.run(command, shell=True, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise RuntimeError(f"Command failed with exit code {result.returncode}: {result.stderr.strip()}")
-        return result.stdout.strip()
+        process = await asyncio.create_subprocess_shell(
+            command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        stdout, _ = await process.communicate()
+        output = stdout.decode().strip()
+        if process.returncode != 0:
+            raise RuntimeError(f"Command failed with exit code {process.returncode}:\n{output}")
+        return output
 
     return generate_tool_spec_from_callable(
         bash,
