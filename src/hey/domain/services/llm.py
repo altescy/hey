@@ -2,7 +2,7 @@ import asyncio
 import contextvars
 import dataclasses
 from collections.abc import Mapping, Sequence
-from typing import Any, Literal
+from typing import Any, Literal, assert_never
 
 from hey.core.agent import Reducer
 from hey.core.pattern import json_match
@@ -30,6 +30,9 @@ from hey.domain.services.tool import (
     dump_tool_result_to_json,
 )
 
+_LLM_STATE = contextvars.ContextVar[LLMState | None]("_LLM_STATE", default=None)
+_MAX_TOOL_RESULT_BYTES = 50 * 1024  # 50 KB
+
 
 def append_user_message(state: LLMState, text: str) -> LLMState:
     new_message = UserMessage(
@@ -39,7 +42,34 @@ def append_user_message(state: LLMState, text: str) -> LLMState:
     return dataclasses.replace(state, history=state.history + (new_message,))
 
 
-_LLM_STATE = contextvars.ContextVar[LLMState | None]("_LLM_STATE", default=None)
+def truncate(s: str, max_bytes: int, direction: Literal["head", "tail"] = "tail") -> str:
+    encoded = s.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return s
+    match direction:
+        case "head":
+            truncated = encoded[-max_bytes:]
+        case "tail":
+            truncated = encoded[:max_bytes]
+        case _:
+            assert_never(direction)
+    # Ensure we don't cut off in the middle of a multibyte character
+    while True:
+        try:
+            output = truncated.decode("utf-8")
+            match direction:
+                case "head":
+                    return "[... truncated]" + output
+                case "tail":
+                    return output + "[truncated ...]"
+                case _:
+                    assert_never(direction)
+
+        except UnicodeDecodeError:
+            if direction == "head":
+                truncated = truncated[1:]
+            else:
+                truncated = truncated[:-1]
 
 
 def use_llm_state() -> LLMState:
@@ -143,6 +173,7 @@ class LLMAgentInterpreter:
             tool_spec = self._tool_specs[tool_name]
             args_json = cmd.record["args_json"]
             status: Literal["success", "error", "denied"]
+            output: str
 
             permission_action = next(
                 (
@@ -163,28 +194,22 @@ class LLMAgentInterpreter:
 
                 params = construct_tool_parameters_from_json(tool_spec, args_json)
                 result = await tool_spec.func(**params)
-                message = ToolResultMessage(
-                    role="tool_result",
-                    tool_call_id=cmd.record["id"],
-                    parts=(TextContent(type="text", text=dump_tool_result_to_json(result)),),
-                )
+                output = dump_tool_result_to_json(result)
                 status = "success"
             except ToolCallDenied as exc:
-                message = ToolResultMessage(
-                    role="tool_result",
-                    tool_call_id=cmd.record["id"],
-                    parts=(TextContent(type="text", text=f"Error: tool call denied: {exc}"),),
-                )
+                output = f"Error: tool call denied: {exc}"
                 status = "denied"
             except (KeyboardInterrupt, EOFError):
                 raise
             except Exception as exc:
-                message = ToolResultMessage(
-                    role="tool_result",
-                    tool_call_id=cmd.record["id"],
-                    parts=(TextContent(type="text", text=f"Error: tool '{cmd.record['name']}' failed: {exc}"),),
-                )
+                output = f"Error: tool '{cmd.record['name']}' execution failed: {exc}"
                 status = "error"
+            output = truncate(output, _MAX_TOOL_RESULT_BYTES)
+            message = ToolResultMessage(
+                role="tool_result",
+                tool_call_id=cmd.record["id"],
+                parts=(TextContent(type="text", text=output),),
+            )
             return EmitToolResult(message=message, status=status)
 
         token = _LLM_STATE.set(state)
