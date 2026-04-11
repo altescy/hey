@@ -31,6 +31,7 @@ def run_agent_loop[StateT, EventT, CmdT, ResultT](
     interpret: Callable[[Sequence[CmdT], StateT], Awaitable[Sequence[EventT]]],
     is_done: Callable[[StateT], bool],
     finish: Callable[[StateT], ResultT],
+    on_event: Callable[[EventT], Awaitable[None]] | None = None,
 ) -> WorkflowResponse[EventT, StateT, ResultT]:
     source = EventSource[EventT]()
 
@@ -41,12 +42,16 @@ def run_agent_loop[StateT, EventT, CmdT, ResultT](
                 turn_events: list[EventT] = []
                 async for event in runtime(current_state):
                     await source.publish(event)
+                    if on_event is not None:
+                        await on_event(event)
                     turn_events.append(event)
                 current_state, cmds = update(turn_events, current_state)
                 while cmds:
                     results = await interpret(cmds, current_state)
                     for evt in results:
                         await source.publish(evt)
+                        if on_event is not None:
+                            await on_event(evt)
                     current_state, cmds = update(list(results), current_state)
             result = finish(current_state)
             await source.aclose()

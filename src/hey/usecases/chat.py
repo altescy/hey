@@ -1,4 +1,3 @@
-from collections.abc import Sequence
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -16,7 +15,6 @@ from hey.domain.services.llm import (
     LLMAgentInterpreter,
     LLMAgentReducer,
     LLMAgentUpdater,
-    RunToolCall,
     append_user_message,
 )
 from hey.domain.services.tool import generate_tool_definition_from_spec
@@ -69,24 +67,20 @@ class AgentChatUseCase:
         state = append_user_message(state, prompt)
         runtime = make_agent_runtime(self._llm_spec.engine, self._agent_reducer, self._llm_spec.contextualizer)
 
-        def update(events: Sequence[LLMEvent], state: LLMState) -> tuple[LLMState, Sequence[RunToolCall]]:
-            result = self._agent_updater(events, state)
-
-            for event in events:
-                match event:
-                    case EmitLLMMessage(message=message) | EmitToolResult(message=message):
-                        self._chat_repository.save_message(
-                            self._chat_repository.create_message(session_id=session_id, message=message)
-                        )
-
-            return result
+        async def on_event(event: LLMEvent) -> None:
+            match event:
+                case EmitLLMMessage(message=message) | EmitToolResult(message=message):
+                    self._chat_repository.save_message(
+                        self._chat_repository.create_message(session_id=session_id, message=message)
+                    )
 
         with self._chat_repository:
             yield run_agent_loop(
                 state,
                 runtime=runtime,
-                update=update,
+                update=self._agent_updater,
                 interpret=self._agent_interpreter,
                 is_done=self._agent_finalizer.is_done,
                 finish=self._agent_finalizer.finalize,
+                on_event=on_event,
             )

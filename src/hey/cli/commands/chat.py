@@ -23,7 +23,7 @@ def _render_text(
     width: int | None = None,
     escape: bool = True,
 ) -> str:
-    text = repr(o)[1:-1] if escape else o if isinstance(o, str) else repr(o)
+    text = (repr(o)[1:-1] if escape else o) if isinstance(o, str) else repr(o)
     if width is not None:
         return textwrap.shorten(text, width=width, placeholder="…")
     return text
