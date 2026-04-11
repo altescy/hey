@@ -1,3 +1,4 @@
+import dataclasses
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -6,6 +7,7 @@ from hey.core.workflow import WorkflowResponse
 from hey.domain.entities.chat import ChatSession, ChatSessionID
 from hey.domain.entities.llm import LLMEvent, LLMSpec, LLMState
 from hey.domain.entities.project import ProjectID
+from hey.domain.entities.tool import ToolPermission
 from hey.domain.repositories.chat import IChatRepository
 from hey.domain.repositories.tool import IToolRepository
 from hey.domain.services.llm import (
@@ -23,6 +25,7 @@ from hey.domain.services.tool import generate_tool_definition_from_spec
 class AgentChatUseCase:
     def __init__(
         self,
+        permission: ToolPermission,
         llm_spec: LLMSpec,
         chat_repository: IChatRepository,
         tool_repository: IToolRepository,
@@ -32,6 +35,9 @@ class AgentChatUseCase:
         self._tool_repository = tool_repository
 
         tool_specs = {spec.name: spec for spec in self._tool_repository.get_all_specs()}
+        for tool_name, tool_spec in tool_specs.items():
+            if param_permission := permission.get(tool_name):
+                tool_specs[tool_name] = dataclasses.replace(tool_spec, permission=param_permission)
 
         self._agent_reducer = LLMAgentReducer()
         self._agent_updater = LLMAgentUpdater()

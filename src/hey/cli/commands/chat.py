@@ -72,6 +72,7 @@ async def _run_chat(prompt: str) -> None:
     project = project_use_case.get_project(path=".")
 
     chat_use_case = AgentChatUseCase(
+        permission=project.config.chat.permission,
         llm_spec=get_litellm_spec(
             model=project.config.chat.model,
             instructions=project.config.chat.instructions,
