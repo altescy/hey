@@ -1,0 +1,89 @@
+from collections.abc import Sequence
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
+from hey.core.agent import make_agent_runtime, run_agent_loop
+from hey.core.workflow import WorkflowResponse
+from hey.domain.entities.chat import ChatSession, ChatSessionID
+from hey.domain.entities.llm import LLMEvent, LLMSpec, LLMState
+from hey.domain.entities.project import ProjectID
+from hey.domain.repositories.chat import IChatRepository
+from hey.domain.repositories.tool import IToolRepository
+from hey.domain.services.llm import (
+    EmitLLMMessage,
+    EmitToolResult,
+    LLMAgentFinalizer,
+    LLMAgentInterpreter,
+    LLMAgentReducer,
+    LLMAgentUpdater,
+    RunToolCall,
+    append_user_message,
+)
+from hey.domain.services.tool import generate_tool_definition_from_spec
+
+
+class AgentChatUseCase:
+    def __init__(
+        self,
+        llm_spec: LLMSpec,
+        chat_repository: IChatRepository,
+        tool_repository: IToolRepository,
+    ) -> None:
+        self._llm_spec = llm_spec
+        self._chat_repository = chat_repository
+        self._tool_repository = tool_repository
+        self._agent_reducer = LLMAgentReducer()
+        self._agent_updater = LLMAgentUpdater()
+        self._agent_interpreter = LLMAgentInterpreter(self._tool_repository)
+        self._agent_finalizer = LLMAgentFinalizer(self._tool_repository)
+
+    async def get_llm_state(self, session_id: ChatSessionID) -> LLMState:
+        tool_specs = self._tool_repository.get_all_specs()
+        tool_definitions = tuple(generate_tool_definition_from_spec(spec) for spec in tool_specs)
+        chat_messages = self._chat_repository.get_messages_by_session_id(session_id)
+        llm_messages = tuple(message.message for message in chat_messages)
+        return LLMState(
+            history=llm_messages,
+            tools=tool_definitions,
+        )
+
+    async def create_session(self, project_id: ProjectID) -> ChatSession:
+        return self._chat_repository.create_session(project_id)
+
+    async def resume_session(self, session_id: ChatSessionID) -> ChatSession:
+        session = self._chat_repository.get_session_by_id(session_id)
+        if session is None:
+            raise ValueError(f"Chat session with ID {session_id} not found")
+        return session
+
+    @asynccontextmanager
+    async def run(
+        self,
+        session_id: ChatSessionID,
+        prompt: str,
+    ) -> AsyncIterator[WorkflowResponse[LLMEvent, LLMState, str]]:
+        state = await self.get_llm_state(session_id)
+        state = append_user_message(state, prompt)
+        runtime = make_agent_runtime(self._llm_spec.engine, self._agent_reducer, self._llm_spec.contextualizer)
+
+        def update(events: Sequence[LLMEvent], state: LLMState) -> tuple[LLMState, Sequence[RunToolCall]]:
+            result = self._agent_updater(events, state)
+
+            for event in events:
+                match event:
+                    case EmitLLMMessage(message=message) | EmitToolResult(message=message):
+                        self._chat_repository.save_message(
+                            self._chat_repository.create_message(session_id=session_id, message=message)
+                        )
+
+            return result
+
+        with self._chat_repository:
+            yield run_agent_loop(
+                state,
+                runtime=runtime,
+                update=update,
+                interpret=self._agent_interpreter,
+                is_done=self._agent_finalizer.is_done,
+                finish=self._agent_finalizer.finalize,
+            )
