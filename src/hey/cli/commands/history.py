@@ -5,6 +5,7 @@ from rich.markdown import Markdown
 from rich.rule import Rule
 
 from hey.domain.entities.chat import ChatMessage
+from hey.domain.entities.llm import ToolResultMessage
 from hey.domain.services.project import get_hey_dot_directory
 from hey.infrastructure.chat import SQLiteChatRepository
 from hey.infrastructure.project import LocalProjectRepository
@@ -52,9 +53,12 @@ def run(args: argparse.Namespace) -> None:
     )
     console.print()
 
-    for chat_message in messages:
+    i = 0
+    while i < len(messages):
+        chat_message = messages[i]
         msg = chat_message.message
         ts = chat_message.created_at.strftime("%Y-%m-%d %H:%M:%S")
+        i += 1
 
         match msg:
             case {"role": "user"}:
@@ -65,12 +69,32 @@ def run(args: argparse.Namespace) -> None:
                 text = "".join(part["text"] for part in parts)
                 if text:
                     console.print(Markdown(text))
+
+                # Collect the tool_result messages that immediately follow this
+                # assistant message, indexed by tool_call_id, so each tool call
+                # can be paired with its result regardless of ordering.
+                results_by_id: dict[str, ToolResultMessage] = {}
+                j = i
+                while j < len(messages) and messages[j].message.get("role") == "tool_result":
+                    result_msg = messages[j].message
+                    assert result_msg["role"] == "tool_result"
+                    results_by_id[result_msg["tool_call_id"]] = result_msg
+                    j += 1
+                # Advance the outer cursor past all consumed tool_result messages.
+                i = j
+
                 for record in tool_calls:
                     console.print(f"  {render_tool_call(record)}")
+                    result = results_by_id.get(record["id"])
+                    if result is not None:
+                        text = "".join(part["text"] for part in result["parts"])
+                        console.print(f"  [dim]╰─ {text[:120]}{'…' if len(text) > 120 else ''}[/dim]")
+
                 console.print()
 
-            case {"role": "tool_result", "parts": parts}:
-                text = "".join(part["text"] for part in parts)
+            case {"role": "tool_result"}:
+                # Orphaned tool_result (should not happen in normal flow).
+                text = "".join(part["text"] for part in msg["parts"])
                 console.print(f"  [dim]╰─ {text[:120]}{'…' if len(text) > 120 else ''}[/dim]")
                 console.print()
 
