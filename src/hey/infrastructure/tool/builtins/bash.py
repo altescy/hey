@@ -1,7 +1,5 @@
 import asyncio
-import json
 
-from hey.domain.entities.llm import ToolCallRecord, ToolResultMessage
 from hey.domain.entities.tool import ToolSpec
 from hey.domain.services.tool import generate_tool_spec_from_callable
 
@@ -20,9 +18,7 @@ def create_bash_tool_spec() -> ToolSpec:
             raise RuntimeError(f"Command failed with exit code {process.returncode}:\n{output}")
         return output
 
-    async def render_markdown(record: ToolCallRecord, result: ToolResultMessage) -> str:
-        command = json.loads(record["args_json"])["command"]
-        output = json.loads("".join(part["text"] for part in result["parts"]))
+    async def render_markdown(output: str, command: str) -> str:
         return f"```\n$ {command}\n\n{output}\n```"
 
     return generate_tool_spec_from_callable(

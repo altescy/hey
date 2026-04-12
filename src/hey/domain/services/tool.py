@@ -3,7 +3,7 @@ import json
 import typing
 from collections.abc import Awaitable, Callable
 from types import UnionType
-from typing import Any, Final, Union
+from typing import Any, Final, Union, cast
 
 import colt
 from pydantic import TypeAdapter
@@ -22,14 +22,14 @@ _TOOL_RETURN_TA: Final = TypeAdapter(
 )
 
 
-def generate_tool_spec_from_callable(
-    func: Callable[..., Awaitable[Any]],
+def generate_tool_spec_from_callable[**ParamsT, ReturnT](
+    func: Callable[ParamsT, Awaitable[ReturnT]],
     /,
     *,
     name: str | None = None,
     description: str | None = None,
     permission: ToolParamPermission | None = None,
-    render_markdown: RenderMarkdownFunc | None = None,
+    render_markdown: RenderMarkdownFunc[ParamsT, ReturnT] | None = None,
 ) -> ToolSpec:
     signature = generate_function_signature(func)
     return ToolSpec(
@@ -39,7 +39,7 @@ def generate_tool_spec_from_callable(
         permission=permission or {},
         parameters_annotation=signature.parameters_annotation,
         return_annotation=signature.return_annotation,
-        render_markdown=render_markdown,
+        render_markdown=cast(RenderMarkdownFunc[ParamsT, Any] | None, render_markdown),
     )
 
 

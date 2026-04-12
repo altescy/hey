@@ -2,6 +2,7 @@ import asyncio
 import contextvars
 import dataclasses
 from collections.abc import Mapping, Sequence
+from contextlib import suppress
 from typing import Any, Literal, assert_never
 
 from hey.core.agent import Reducer
@@ -174,6 +175,7 @@ class LLMAgentInterpreter:
             args_json = cmd.record["args_json"]
             status: Literal["success", "error", "denied"]
             output: str
+            markdown: str | None = None
 
             permission_action = next(
                 (
@@ -196,6 +198,8 @@ class LLMAgentInterpreter:
                 result = await tool_spec.func(**params)
                 output = dump_tool_result_to_json(result)
                 status = "success"
+                with suppress(Exception):
+                    markdown = await tool_spec.render_markdown(result, **params) if tool_spec.render_markdown else None
             except ToolCallDenied as exc:
                 output = f"Error: tool call denied: {exc}"
                 status = "denied"
@@ -210,7 +214,6 @@ class LLMAgentInterpreter:
                 tool_call_id=cmd.record["id"],
                 parts=(TextContent(type="text", text=output),),
             )
-            markdown = await tool_spec.render_markdown(cmd.record, message) if tool_spec.render_markdown else None
             return EmitToolResult(message=message, status=status, markdown=markdown)
 
         token = _LLM_STATE.set(state)

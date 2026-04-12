@@ -1,12 +1,16 @@
 from hey.domain.entities.tool import ToolName, ToolSpec
 from hey.domain.repositories.tool import IToolRepository
 
-from ..builtins import create_bash_tool_spec
+from .. import builtins
 
 
 class BuiltinToolRepository(IToolRepository):
     def __init__(self) -> None:
-        tools = [create_bash_tool_spec()]
+        tools = [
+            builtins.create_read_tool_spec(),
+            builtins.create_edit_tool_spec(),
+            builtins.create_bash_tool_spec(),
+        ]
 
         self._tools = {tool.name: tool for tool in tools}
 
