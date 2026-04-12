@@ -10,7 +10,7 @@ from pydantic import TypeAdapter
 
 from hey.core.schema import generate_function_signature, generate_json_schema
 from hey.domain.entities.llm import ToolDefinition
-from hey.domain.entities.tool import AskPermissionFunc, ToolName, ToolParamPermission, ToolSpec
+from hey.domain.entities.tool import AskPermissionFunc, RenderMarkdownFunc, ToolName, ToolParamPermission, ToolSpec
 
 _TOOL_RETURN_TA: Final = TypeAdapter(
     Any,
@@ -29,6 +29,7 @@ def generate_tool_spec_from_callable(
     name: str | None = None,
     description: str | None = None,
     permission: ToolParamPermission | None = None,
+    render_markdown: RenderMarkdownFunc | None = None,
 ) -> ToolSpec:
     signature = generate_function_signature(func)
     return ToolSpec(
@@ -38,6 +39,7 @@ def generate_tool_spec_from_callable(
         permission=permission or {},
         parameters_annotation=signature.parameters_annotation,
         return_annotation=signature.return_annotation,
+        render_markdown=render_markdown,
     )
 
 

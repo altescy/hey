@@ -13,7 +13,14 @@ from rich.markdown import Markdown
 from rich.spinner import Spinner
 from rich.text import Text
 
-from hey.domain.entities.llm import EmitLLMMessage, EmitLLMSignal, EmitToolResult, LLMMessage, ToolCallRecord
+from hey.domain.entities.llm import (
+    EmitLLMMessage,
+    EmitLLMSignal,
+    EmitToolResult,
+    LLMMessage,
+    ToolCallRecord,
+    ToolResultMessage,
+)
 from hey.infrastructure.chat import InMemoryChatRepository
 from hey.infrastructure.llm import get_litellm_spec
 from hey.infrastructure.project import LocalProjectRepository
@@ -58,7 +65,10 @@ def _get_console_width(console: Console) -> int:
 
 
 class ChatDisplay:
-    def __init__(self, console: Console) -> None:
+    def __init__(
+        self,
+        console: Console,
+    ) -> None:
         self._console = console
         self._markdown = Markdown("")
         self._pending: dict[str, tuple[ToolCallRecord, Columns]] = {}
@@ -105,16 +115,24 @@ class ChatDisplay:
         self._refresh()
 
     def finish_tool_call(
-        self, tool_call_id: str, result: LLMMessage, status: Literal["success", "error", "denied"]
+        self,
+        result: ToolResultMessage,
+        status: Literal["success", "error", "denied"],
+        markdown: str | None = None,
     ) -> None:
-        entry = self._pending.pop(tool_call_id, None)
+        entry = self._pending.pop(result["tool_call_id"], None)
         if entry is None:
             return
         record, _ = entry
         self._live.console.print(f"{_tool_call_status_icon(status)} {_render_tool_call(record)}")
-        self._live.console.print(
-            f"    [dim]╰─ {_render_llm_message(result, width=_get_console_width(self._console) - 6)}[/dim]\n"
-        )
+        if markdown:
+            self._live.console.print()
+            self._live.console.print(Markdown(markdown))
+            self._live.console.print()
+        else:
+            self._live.console.print(
+                f"    [dim]╰─ {_render_llm_message(result, width=_get_console_width(self._console) - 6)}[/dim]\n"
+            )
         self._refresh()
 
 
@@ -163,8 +181,8 @@ async def _run_chat(prompt: str) -> None:
                         if message["role"] == "assistant":
                             for record in message["tool_calls"]:
                                 display.add_pending_tool_call(record)
-                    case EmitToolResult(message=message, status=status):
-                        display.finish_tool_call(message["tool_call_id"], message, status)
+                    case EmitToolResult(message=message, status=status, markdown=markdown):
+                        display.finish_tool_call(message, status, markdown)
 
     await response.collect()
 

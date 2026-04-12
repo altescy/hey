@@ -134,6 +134,7 @@ class EmitLLMMessage:
 class EmitToolResult:
     message: ToolResultMessage
     status: Literal["success", "error", "denied"]
+    markdown: str | None = None
 
 
 type LLMEvent = EmitLLMSignal | EmitLLMMessage | EmitToolResult

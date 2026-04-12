@@ -210,7 +210,8 @@ class LLMAgentInterpreter:
                 tool_call_id=cmd.record["id"],
                 parts=(TextContent(type="text", text=output),),
             )
-            return EmitToolResult(message=message, status=status)
+            markdown = await tool_spec.render_markdown(cmd.record, message) if tool_spec.render_markdown else None
+            return EmitToolResult(message=message, status=status, markdown=markdown)
 
         token = _LLM_STATE.set(state)
 
