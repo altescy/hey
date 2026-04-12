@@ -205,7 +205,15 @@ async def _run_chat(
 
 
 def run(args: argparse.Namespace) -> None:
+    import sys
+
     prompt = " ".join(args.prompt)
     temporary = args.temporary
     new_session = args.new_session
+
+    if not sys.stdin.isatty():
+        stdin_content = sys.stdin.read()
+        if stdin_content:
+            prompt = f"{prompt}\n---\n{stdin_content}" if prompt else stdin_content
+
     asyncio.run(_run_chat(prompt, temporary, new_session))
