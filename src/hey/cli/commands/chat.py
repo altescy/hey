@@ -48,6 +48,7 @@ async def _run_chat(prompt: str, temporary: bool, new_session: bool) -> None:
 
     console = Console()
     display = ChatDisplay(console)
+    permission_lock = asyncio.Lock()
 
     if temporary:
         chat_repository = InMemoryChatRepository()
@@ -59,7 +60,7 @@ async def _run_chat(prompt: str, temporary: bool, new_session: bool) -> None:
         llm_spec=get_litellm_spec(model=project.config.chat.model, instructions=project.config.chat.instructions),
         chat_repository=chat_repository,
         tool_repository=BuiltinToolRepository(),
-        ask_permission=partial(ask_permission, display, console),
+        ask_permission=partial(ask_permission, display, console, permission_lock),
     )
 
     if new_session or temporary:

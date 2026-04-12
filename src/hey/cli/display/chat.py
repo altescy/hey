@@ -20,6 +20,7 @@ class ChatDisplay:
         self._markdown = Markdown("")
         self._pending: dict[str, tuple[ToolCallRecord, Columns]] = {}
         self._live = Live(self._renderable(), console=console, refresh_per_second=16)
+        self._stop_count = 0  # 参照カウント: > 0 のとき Live は停止中
 
     def _renderable(self) -> RenderableType:
         from rich.console import Group
@@ -42,11 +43,19 @@ class ChatDisplay:
         self._live.__exit__(exc_type, exc_val, exc_tb)
 
     def stop(self) -> None:
-        self._live.stop()
+        """停止リクエストを1つ積む。最初のリクエスト時だけ Live を停止する。"""
+        self._stop_count += 1
+        if self._stop_count == 1:
+            self._live.stop()
 
     def start(self) -> None:
-        self._live.start()
-        self._refresh()
+        """停止リクエストを1つ解放する。すべて解放されたとき Live を再開する。"""
+        if self._stop_count <= 0:
+            return
+        self._stop_count -= 1
+        if self._stop_count == 0:
+            self._live.start()
+            self._refresh()
 
     def append_text_delta(self, delta: str) -> None:
         self._markdown = Markdown(self._markdown.markup + delta)
@@ -85,19 +94,27 @@ class ChatDisplay:
         self._refresh()
 
 
-async def ask_permission(display: ChatDisplay, console: Console, record: ToolCallRecord) -> Literal["allow", "deny"]:
+async def ask_permission(
+    display: ChatDisplay,
+    console: Console,
+    lock: asyncio.Lock,
+    record: ToolCallRecord,
+) -> Literal["allow", "deny"]:
+    # Live をすぐに停止（参照カウントで管理されるため、複数同時でも1度だけ止まる）
     display.stop()
     try:
-        while True:
-            answer = await asyncio.to_thread(
-                console.input,
-                f"\n[yellow]Permission required:[/yellow] {render_tool_call(record)}\nAllow this tool call? (y/n) ",
-            )
-            console.print()
-            match answer.lower():
-                case "y":
-                    return "allow"
-                case "n":
-                    return "deny"
+        async with lock:
+            while True:
+                answer = await asyncio.to_thread(
+                    console.input,
+                    f"\n[yellow]Permission required:[/yellow] {render_tool_call(record)}\nAllow this tool call? (y/n) ",
+                )
+                console.print()
+                match answer.lower():
+                    case "y":
+                        return "allow"
+                    case "n":
+                        return "deny"
     finally:
+        # 全ての確認が終わった時点で Live が再開される
         display.start()
