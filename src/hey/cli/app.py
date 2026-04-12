@@ -2,27 +2,20 @@ import argparse
 
 from hey.version import VERSION
 
-from .commands import chat, show_chat_history
-
-
-def build_parser(*, prog: str | None = None) -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog=prog, description="Hey is a workflow engine for Python.")
-    parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
-    parser.add_argument("prompt", nargs="*", help="The prompt to send to the LLM.")
-    parser.add_argument("--show", choices=["chat-history"], help="Show additional information.")
-    parser.add_argument("--temporary", action="store_true", help="Use temporary in-memory storage for chat history.")
-    parser.add_argument(
-        "--new-session", action="store_true", help="Start a new chat session instead of resuming the latest one."
-    )
-    return parser
+from .commands import chat, history
 
 
 def main(prog: str | None = None) -> None:
-    parser = build_parser(prog=prog)
+    parser = argparse.ArgumentParser(prog=prog, description="Hey is a CLI chat agent.")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
+    parser.add_argument("prompt", nargs="*", help="The prompt to send to the LLM.")
+    parser.add_argument("--history", action="store_true", help="Show chat history.")
+    chat._add_options(parser)
+    history.add_arguments(parser)
+
     args = parser.parse_args()
 
-    if args.show == "chat-history":
-        show_chat_history.run(args)
-        return
-
-    chat.run(args)
+    if args.history:
+        history.run(args)
+    else:
+        chat.run(args)
