@@ -48,8 +48,7 @@ async def use_file_time(path: str | PathLike) -> AsyncIterator[_FileTime]:
 
     state = _FILE_TIME_STATE.get()
     if path not in state:
-        stat = path.stat()
-        state[path] = (Stamp(datetime.datetime.now(), stat.st_mtime, stat.st_size), asyncio.Lock())
+        state[path] = (Stamp(datetime.datetime.fromtimestamp(0), 0, 0), asyncio.Lock())
 
     stamp, lock = state[path]
 
