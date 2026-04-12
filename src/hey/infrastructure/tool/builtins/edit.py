@@ -6,11 +6,21 @@ from hey.domain.services.file import use_file_time
 from hey.domain.services.tool import generate_tool_spec_from_callable
 
 _DESCRIPTION = """\
-Edit a file by replacing an old string with a new string.
+Overwrite a specific substring in a file with new content.
+
+The tool locates `old_string` in the file and replaces it with `new_string`, \
+then returns a unified diff of the change.
 
 Usage:
-- You must use `read` tool at least once in the conversation before editing. This tool will error if you attempt an edit without reading the file.
-- Use `replace_all` for replacing and renaming strings across the file. This parameter is useful if you want to rename a variable for instance.
+- You must call the `read` tool on the file at least once before editing. \
+  Editing without a prior read will raise an error.
+- `old_string` must match the file content exactly, including whitespace and \
+  indentation. Include enough surrounding lines to make the match unique.
+- If `old_string` appears more than once and `replace_all` is false, the tool \
+  raises an error. Either broaden the context in `old_string` or set \
+  `replace_all=true` to replace every occurrence.
+- If the file has been modified externally since the last read, the tool \
+  raises an error. Re-read the file and retry.
 """.strip()
 
 

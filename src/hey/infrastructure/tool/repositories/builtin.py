@@ -10,6 +10,11 @@ class BuiltinToolRepository(IToolRepository):
             builtins.create_read_tool_spec(),
             builtins.create_edit_tool_spec(),
             builtins.create_bash_tool_spec(),
+            builtins.create_ls_tool_spec(),
+            builtins.create_glob_tool_spec(),
+            builtins.create_grep_tool_spec(),
+            builtins.create_web_fetch_tool_spec(),
+            builtins.create_web_search_tool_spec(),
         ]
 
         self._tools = {tool.name: tool for tool in tools}
