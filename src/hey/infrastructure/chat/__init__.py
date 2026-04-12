@@ -1,5 +1,6 @@
-from .repositories import InMemoryChatRepository
+from .repositories import InMemoryChatRepository, SQLiteChatRepository
 
 __all__ = [
     "InMemoryChatRepository",
+    "SQLiteChatRepository",
 ]

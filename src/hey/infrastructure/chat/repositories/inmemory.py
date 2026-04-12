@@ -35,14 +35,17 @@ class InMemoryChatRepository(IChatRepository):
             created_at=timestamp,
             updated_at=timestamp,
         )
-        self.save_message(chat_message)
+        self._messages[session_id].append(chat_message)
         return chat_message
 
     def get_session_by_id(self, session_id: ChatSessionID) -> ChatSession | None:
         return self._sessions.get(session_id)
 
-    def save_message(self, message: ChatMessage) -> None:
-        self._messages[message.session_id].append(message)
+    def get_latest_session_by_project_id(self, project_id: ProjectID) -> ChatSession | None:
+        sessions = [s for s in self._sessions.values() if s.project_id == project_id]
+        if not sessions:
+            return None
+        return max(sessions, key=lambda s: s.updated_at)
 
     def get_messages_by_session_id(self, session_id: ChatSessionID) -> list[ChatMessage]:
         return self._messages.get(session_id, [])

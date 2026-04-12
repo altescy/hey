@@ -21,7 +21,8 @@ from hey.domain.entities.llm import (
     ToolCallRecord,
     ToolResultMessage,
 )
-from hey.infrastructure.chat import InMemoryChatRepository
+from hey.domain.services.project import get_hey_dot_directory
+from hey.infrastructure.chat import InMemoryChatRepository, SQLiteChatRepository
 from hey.infrastructure.llm import get_litellm_spec
 from hey.infrastructure.project import LocalProjectRepository
 from hey.infrastructure.tool import BuiltinToolRepository
@@ -154,21 +155,37 @@ async def _ask_permission(display: ChatDisplay, console: Console, record: ToolCa
         display.start()
 
 
-async def _run_chat(prompt: str) -> None:
+async def _run_chat(
+    prompt: str,
+    temporary: bool,
+    new_session: bool,
+) -> None:
     project_use_case = ProjectUseCase(project_repository=LocalProjectRepository())
     project = project_use_case.get_project(path=".")
 
     console = Console()
     display = ChatDisplay(console)
 
+    if temporary:
+        chat_repository = InMemoryChatRepository()
+    else:
+        chat_repository = SQLiteChatRepository(get_hey_dot_directory(project.directory) / "hey.db")
+
     chat_use_case = AgentChatUseCase(
         permission=project.config.chat.permission,
         llm_spec=get_litellm_spec(model=project.config.chat.model, instructions=project.config.chat.instructions),
-        chat_repository=InMemoryChatRepository(),
+        chat_repository=chat_repository,
         tool_repository=BuiltinToolRepository(),
         ask_permission=partial(_ask_permission, display, console),
     )
-    session = await chat_use_case.create_session(project_id=project.id)
+
+    if new_session or temporary:
+        session = await chat_use_case.create_session(project_id=project.id)
+    else:
+        session = await chat_use_case.get_or_create_session(
+            project_id=project.id,
+            session_timeout=project.config.chat.session_timeout,
+        )
 
     with display:
         async with chat_use_case.run(session_id=session.id, prompt=prompt) as response:
@@ -188,4 +205,7 @@ async def _run_chat(prompt: str) -> None:
 
 
 def run(args: argparse.Namespace) -> None:
-    asyncio.run(_run_chat(" ".join(args.prompt)))
+    prompt = " ".join(args.prompt)
+    temporary = args.temporary
+    new_session = args.new_session
+    asyncio.run(_run_chat(prompt, temporary, new_session))
