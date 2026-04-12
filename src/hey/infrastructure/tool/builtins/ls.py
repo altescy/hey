@@ -46,6 +46,10 @@ _DEFAULT_IGNORE: frozenset[str] = frozenset(
 _LIMIT = 200
 
 
+def is_available() -> bool:
+    return True
+
+
 def create_ls_tool_spec() -> ToolSpec:
     async def ls(path: str = ".", ignore: list[str] | None = None) -> str:
         """List files and directories under path as an indented tree."""

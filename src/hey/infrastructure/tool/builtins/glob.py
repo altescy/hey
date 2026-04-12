@@ -23,6 +23,10 @@ Notes:
 _LIMIT = 100
 
 
+def is_available() -> bool:
+    return True
+
+
 def create_glob_tool_spec() -> ToolSpec:
     async def glob(pattern: str, path: str | None = None) -> str:
         """Find files matching a glob pattern, sorted by modification time."""

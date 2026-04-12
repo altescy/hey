@@ -38,6 +38,15 @@ _HEADERS = {
 }
 
 
+def is_available() -> bool:
+    try:
+        import httpx  # noqa: F401
+        import markitdown  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
 def create_web_fetch_tool_spec() -> ToolSpec:
     async def web_fetch(
         url: str,

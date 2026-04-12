@@ -27,6 +27,10 @@ Notes:
 """.strip()
 
 
+def is_available() -> bool:
+    return True
+
+
 def create_read_tool_spec() -> ToolSpec:
     async def read(file_path: str, offset: int = 1, limit: int = _DEFAULT_LIMIT) -> str:
         """Read a text file with optional offset/limit pagination."""

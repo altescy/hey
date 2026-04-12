@@ -24,6 +24,10 @@ _LIMIT = 100
 _MAX_LINE_LENGTH = 2000
 
 
+def is_available() -> bool:
+    return True
+
+
 def create_grep_tool_spec() -> ToolSpec:
     async def grep(pattern: str, path: str | None = None, include: str | None = None) -> str:
         """Search file contents with a regex, returning matching lines grouped by file."""

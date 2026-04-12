@@ -28,6 +28,10 @@ class _EditResult(NamedTuple):
     diff: str
 
 
+def is_available() -> bool:
+    return True
+
+
 def create_edit_tool_spec() -> ToolSpec:
     async def edit(
         file_path: str,

@@ -26,6 +26,14 @@ _MAX_RESULTS_DEFAULT = 10
 _MAX_RESULTS_LIMIT = 50
 
 
+def is_available() -> bool:
+    try:
+        import ddgs  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
 def create_web_search_tool_spec() -> ToolSpec:
     async def web_search(
         query: str,

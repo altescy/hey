@@ -1,22 +1,25 @@
 from hey.domain.entities.tool import ToolName, ToolSpec
 from hey.domain.repositories.tool import IToolRepository
 
-from .. import builtins
+from ..builtins import bash, edit, glob, grep, ls, read, web_fetch, web_search
+
+# Each entry pairs an availability check with the corresponding factory.
+# Tools whose is_available() returns False are silently skipped at startup.
+_BUILTIN_TOOL_ENTRIES = [
+    (bash.is_available, bash.create_bash_tool_spec),
+    (edit.is_available, edit.create_edit_tool_spec),
+    (glob.is_available, glob.create_glob_tool_spec),
+    (grep.is_available, grep.create_grep_tool_spec),
+    (ls.is_available, ls.create_ls_tool_spec),
+    (read.is_available, read.create_read_tool_spec),
+    (web_fetch.is_available, web_fetch.create_web_fetch_tool_spec),
+    (web_search.is_available, web_search.create_web_search_tool_spec),
+]
 
 
 class BuiltinToolRepository(IToolRepository):
     def __init__(self) -> None:
-        tools = [
-            builtins.create_read_tool_spec(),
-            builtins.create_edit_tool_spec(),
-            builtins.create_bash_tool_spec(),
-            builtins.create_ls_tool_spec(),
-            builtins.create_glob_tool_spec(),
-            builtins.create_grep_tool_spec(),
-            builtins.create_web_fetch_tool_spec(),
-            builtins.create_web_search_tool_spec(),
-        ]
-
+        tools = [create_spec() for is_available, create_spec in _BUILTIN_TOOL_ENTRIES if is_available()]
         self._tools = {tool.name: tool for tool in tools}
 
     def get_all_specs(self) -> list[ToolSpec]:

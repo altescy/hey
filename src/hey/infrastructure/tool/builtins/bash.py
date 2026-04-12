@@ -29,6 +29,10 @@ process that has no dedicated tool.
 """.strip()
 
 
+def is_available() -> bool:
+    return True
+
+
 def create_bash_tool_spec() -> ToolSpec:
     async def bash(
         command: str,
