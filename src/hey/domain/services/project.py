@@ -13,7 +13,16 @@ def get_project_id_from_path(path: str | PathLike) -> ProjectID:
 
 
 def get_project_directory(path: str | PathLike) -> Path:
-    return Path(path).resolve()
+    start = Path(path).resolve()
+    current = start if start.is_dir() else start.parent
+    markers = {
+        HEY_CONFIG_FILENAME,
+        ".git",
+    }
+    for directory in (current, *current.parents):
+        if any((directory / marker).exists() for marker in markers):
+            return directory
+    return current
 
 
 def get_hey_config_path(project_directory: Path) -> Path:

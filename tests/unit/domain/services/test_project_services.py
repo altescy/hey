@@ -35,13 +35,46 @@ class TestGetProjectIdFromPath:
 
 
 class TestGetProjectDirectory:
-    def test_returns_resolved_path(self, tmp_path) -> None:
+    def test_returns_given_directory_when_no_markers(self, tmp_path) -> None:
+        # tmp_path には何もマーカーがないので、tmp_path 自身を返す
         result = get_project_directory(tmp_path)
         assert result == tmp_path.resolve()
 
     def test_resolves_string_input(self, tmp_path) -> None:
         result = get_project_directory(str(tmp_path))
         assert result == tmp_path.resolve()
+
+    def test_finds_root_with_git_marker(self, tmp_path) -> None:
+        (tmp_path / ".git").mkdir()
+        subdir = tmp_path / "src" / "pkg"
+        subdir.mkdir(parents=True)
+        result = get_project_directory(subdir)
+        assert result == tmp_path
+
+    def test_finds_root_with_hey_yaml_marker(self, tmp_path) -> None:
+        (tmp_path / HEY_CONFIG_FILENAME).touch()
+        subdir = tmp_path / "subdir"
+        subdir.mkdir()
+        result = get_project_directory(subdir)
+        assert result == tmp_path
+
+    def test_prefers_nearest_marker(self, tmp_path) -> None:
+        # ルートと中間の両方にマーカーがある場合、最も近い（深い）ものを返す
+        (tmp_path / ".git").mkdir()
+        inner = tmp_path / "inner"
+        inner.mkdir()
+        (inner / ".git").mkdir()
+        subdir = inner / "src"
+        subdir.mkdir()
+        result = get_project_directory(subdir)
+        assert result == inner
+
+    def test_file_path_uses_parent_directory(self, tmp_path) -> None:
+        (tmp_path / ".git").mkdir()
+        file = tmp_path / "file.txt"
+        file.touch()
+        result = get_project_directory(file)
+        assert result == tmp_path
 
 
 class TestGetHeyConfigPath:
