@@ -60,14 +60,15 @@ class AgentChatUseCase:
         with self._chat_repository:
             return self._chat_repository.create_session(project_id)
 
-    async def get_or_create_session(self, project_id: ProjectID, session_timeout: float) -> ChatSession:
+    async def get_or_create_session(self, project_id: ProjectID, session_timeout: float) -> tuple[ChatSession, bool]:
+        """Return (session, is_new). is_new is True when a fresh session was created."""
         session = self._chat_repository.get_latest_session_by_project_id(project_id)
         if session is not None:
             elapsed = (datetime.datetime.now(TIMEZONE) - session.updated_at).total_seconds()
             if elapsed <= session_timeout:
-                return session
+                return session, False
         with self._chat_repository:
-            return self._chat_repository.create_session(project_id)
+            return self._chat_repository.create_session(project_id), True
 
     async def resume_session(self, session_id: ChatSessionID) -> ChatSession:
         session = self._chat_repository.get_session_by_id(session_id)

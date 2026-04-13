@@ -4,6 +4,7 @@ import sys
 from functools import partial
 
 from rich.console import Console
+from rich.rule import Rule
 
 from hey.domain.entities.llm import EmitLLMMessage, EmitLLMSignal, EmitToolResult
 from hey.domain.services.project import get_hey_dot_directory
@@ -63,13 +64,18 @@ async def _run_chat(prompt: str, temporary: bool, new_session: bool) -> None:
         ask_permission=partial(ask_permission, display, console, permission_lock),
     )
 
+    is_new = True
     if new_session or temporary:
         session = await chat_use_case.create_session(project_id=project.id)
     else:
-        session = await chat_use_case.get_or_create_session(
+        session, is_new = await chat_use_case.get_or_create_session(
             project_id=project.id,
             session_timeout=project.config.chat.session_timeout,
         )
+
+    if is_new and not temporary:
+        console.print(Rule(f"[dim]New session started  ·  Session {session.id}[/dim]", style="dim"))
+        console.print()
 
     with display:
         async with chat_use_case.run(session_id=session.id, prompt=prompt) as response:
