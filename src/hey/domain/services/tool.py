@@ -3,7 +3,7 @@ import json
 import typing
 from collections.abc import Awaitable, Callable, Iterable
 from types import UnionType
-from typing import Any, Final, Union, cast
+from typing import Any, Final, Union
 
 import colt
 from pydantic import TypeAdapter
@@ -12,10 +12,10 @@ from hey.core.schema import generate_function_signature, generate_json_schema
 from hey.domain.entities.llm import ToolDefinition
 from hey.domain.entities.tool import (
     AskPermissionFunc,
-    RenderMarkdownFunc,
     ToolName,
     ToolParamPermission,
     ToolPermission,
+    ToolRenderFunc,
     ToolSpec,
 )
 
@@ -29,24 +29,24 @@ _TOOL_RETURN_TA: Final = TypeAdapter(
 )
 
 
-def generate_tool_spec_from_callable[**ParamsT, ReturnT](
+def generate_tool_spec_from_callable[**ParamsT, ReturnT, ViewT](
     func: Callable[ParamsT, Awaitable[ReturnT]],
     /,
     *,
     name: str | None = None,
     description: str | None = None,
     permission: ToolParamPermission | None = None,
-    render_markdown: RenderMarkdownFunc[ParamsT, ReturnT] | None = None,
-) -> ToolSpec:
+    render: ToolRenderFunc[ParamsT, ReturnT, ViewT] | None = None,
+) -> ToolSpec[ParamsT, ReturnT, ViewT]:
     signature = generate_function_signature(func)
-    return ToolSpec(
+    return ToolSpec(  # pyright: ignore[reportReturnType]
         name=ToolName(name or signature.name),
         description=description or (func.__doc__.strip() if func.__doc__ else ""),
         func=func,
         permission=permission or {},
         parameters_annotation=signature.parameters_annotation,
         return_annotation=signature.return_annotation,
-        render_markdown=cast(RenderMarkdownFunc[ParamsT, Any] | None, render_markdown),
+        render=render,  # pyright: ignore[reportArgumentType]
     )
 
 
@@ -90,7 +90,7 @@ def construct_tool_parameters_from_json(
 
 
 def construct_tool_result_from_json[ReturnT](
-    spec: ToolSpec[Any, ReturnT],
+    spec: ToolSpec[Any, ReturnT, Any],
     result_json: str,
 ) -> ReturnT:
     text = result_json

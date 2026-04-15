@@ -75,5 +75,5 @@ def create_bash_tool_spec() -> ToolSpec:
         name="bash",
         description=_DESCRIPTION,
         permission={"command.*": "ask", "command.ls *": "allow"},
-        render_markdown=render_markdown,
+        render=render_markdown,
     )

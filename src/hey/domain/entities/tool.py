@@ -14,16 +14,16 @@ type ToolParamPermission = Mapping[ParamPattern, ToolPermissionAction]
 type ToolPermission = Mapping[ToolName, ToolParamPermission]
 
 type AskPermissionFunc = Callable[[ToolCallRecord], Awaitable[Literal["allow", "deny"]]]
-type RenderMarkdownFunc[**ParamsT, ReturnT] = Callable[Concatenate[ReturnT, ParamsT], Awaitable[str]]
+type ToolRenderFunc[**ParamsT, ReturnT, ViewT] = Callable[Concatenate[ReturnT, ParamsT], Awaitable[ViewT]]
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class ToolSpec[**ParamsT, ReturnT]:
+class ToolSpec[**ParamsT, ReturnT, ViewT]:
     name: ToolName
     description: str
     func: Callable[ParamsT, Awaitable[ReturnT]]
     permission: ToolParamPermission
     parameters_annotation: type[dict[str, Any]]
     return_annotation: type[ReturnT]
-    render_markdown: RenderMarkdownFunc[ParamsT, ReturnT] | None = None
+    render: ToolRenderFunc[ParamsT, ReturnT, ViewT] | None = None
     ask_permission: AskPermissionFunc | None = None

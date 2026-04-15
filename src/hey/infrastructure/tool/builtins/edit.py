@@ -80,5 +80,5 @@ def create_edit_tool_spec() -> ToolSpec:
         name="edit",
         description=_DESCRIPTION,
         permission={"file_path.*": "ask"},
-        render_markdown=render_markdown,
+        render=render_markdown,
     )

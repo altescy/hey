@@ -193,7 +193,7 @@ async def interpret_llm_cmds(
         args_json = cmd.record["args_json"]
         status: Literal["success", "error", "denied"]
         output: str
-        markdown: str | None = None
+        view = None
 
         permission_action = next(
             (
@@ -217,7 +217,7 @@ async def interpret_llm_cmds(
             output = dump_tool_result_to_json(result)
             status = "success"
             with suppress(Exception):
-                markdown = await tool_spec.render_markdown(result, **params) if tool_spec.render_markdown else None
+                view = await tool_spec.render(result, **params) if tool_spec.render else None
         except ToolCallDenied as exc:
             output = f"Error: tool call denied: {exc}"
             status = "denied"
@@ -232,7 +232,7 @@ async def interpret_llm_cmds(
             tool_call_id=cmd.record["id"],
             parts=(TextContent(type="text", text=output),),
         )
-        return EmitToolResult(message=message, status=status, markdown=markdown)
+        return EmitToolResult(message=message, status=status, view=view)
 
     token = _LLM_STATE.set(state)
 
@@ -308,7 +308,7 @@ def run_llm[ResponseT](
     spec: LLMSpec,
     state: LLMState | None = None,
     tools: Sequence[ToolSpec] = (),
-    response_format: ToolSpec[Any, ResponseT] | None = None,
+    response_format: ToolSpec[Any, ResponseT, Any] | None = None,
     on_event: OnLLMEventCallback | None = None,
 ) -> WorkflowResponse[LLMEvent, LLMState, ResponseT]:
     state = state or LLMState()

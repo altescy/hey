@@ -131,10 +131,10 @@ class EmitLLMMessage:
 
 
 @dataclasses.dataclass(frozen=True)
-class EmitToolResult:
+class EmitToolResult[ViewT]:
     message: ToolResultMessage
     status: Literal["success", "error", "denied"]
-    markdown: str | None = None
+    view: ViewT | None = None
 
 
 type LLMEvent = EmitLLMSignal | EmitLLMMessage | EmitToolResult
