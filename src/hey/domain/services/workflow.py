@@ -70,9 +70,10 @@ def make_llm_workflow_node_from_agent[QueryT, ResponseT](
 
     tool_specs, response_format_spec = make_tool_specs_for_agent(spec)
 
-    async def _node_func(state: LLMWorkflowState) -> AsyncIterator[Control[LLMWorkflowEvent, dict[str, Any]]]:
-        nonlocal prompt
-
+    async def _node_func(
+        state: LLMWorkflowState,
+        prompt: str | PromptBuilder,
+    ) -> AsyncIterator[Control[LLMWorkflowEvent, dict[str, Any]]]:
         prompt = prompt(state) if callable(prompt) else prompt
 
         local_state = _resolve_local_state(
@@ -106,7 +107,7 @@ def make_llm_workflow_node_from_agent[QueryT, ResponseT](
 
     return WorkflowNode(
         name=name,
-        func=_node_func,
+        func=partial(_node_func, prompt=prompt),
         deps=deps,
         cond=cond,
         until=until,
