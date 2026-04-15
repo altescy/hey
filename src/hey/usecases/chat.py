@@ -3,19 +3,20 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from hey.core.workflow import WorkflowResponse
+from hey.domain.entities.agent import LLMAgentSpec
 from hey.domain.entities.chat import ChatSession, ChatSessionID
 from hey.domain.entities.llm import LLMEvent, LLMState
 from hey.domain.entities.project import ProjectID
 from hey.domain.repositories.chat import IChatRepository
+from hey.domain.services.agent import run_llm_agent
 from hey.domain.services.chat import TIMEZONE
-from hey.domain.services.llm import append_user_message
-from hey.domain.services.workflow import LLMAgent, create_on_event_callback_for_chat
+from hey.domain.services.llm import append_user_message, make_llm_state, make_on_event_callback_for_chat
 
 
-class AgentChatUseCase:
+class AgentChatUseCase[QueryT, ResponseT]:
     def __init__(
         self,
-        agent: LLMAgent,
+        agent: LLMAgentSpec[QueryT, ResponseT],
         chat_repository: IChatRepository,
     ) -> None:
         self._agent = agent
@@ -24,7 +25,7 @@ class AgentChatUseCase:
     async def get_llm_state(self, session_id: ChatSessionID) -> LLMState:
         chat_messages = self._chat_repository.get_messages_by_session_id(session_id)
         llm_messages = tuple(message.message for message in chat_messages)
-        return self._agent.make_state(history=llm_messages)
+        return make_llm_state(llm_messages)
 
     async def create_session(self, project_id: ProjectID) -> ChatSession:
         with self._chat_repository:
@@ -51,13 +52,14 @@ class AgentChatUseCase:
         self,
         session_id: ChatSessionID,
         prompt: str,
-    ) -> AsyncIterator[WorkflowResponse[LLMEvent, LLMState, str]]:
+    ) -> AsyncIterator[WorkflowResponse[LLMEvent, LLMState, ResponseT]]:
 
         state = await self.get_llm_state(session_id)
         state = append_user_message(state, prompt)
         self._chat_repository.create_message(session_id=session_id, message=state.history[-1])
-        yield self._agent.run(
-            prompt,
+        yield run_llm_agent(
+            spec=self._agent,
+            prompt=prompt,
             state=state,
-            on_event=create_on_event_callback_for_chat(session_id, self._chat_repository),
+            on_event=make_on_event_callback_for_chat(session_id, self._chat_repository),
         )

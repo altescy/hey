@@ -70,7 +70,7 @@ def setup_tool_permission(
     tools: Iterable[ToolSpec],
     permission: ToolPermission | None = None,
     ask_permission: AskPermissionFunc | None = None,
-) -> list[ToolSpec]:
+) -> tuple[ToolSpec, ...]:
     permission = permission or {}
     tool_specs = []
     for tool in tools:
@@ -79,7 +79,7 @@ def setup_tool_permission(
         if ask_permission is not None:
             tool = set_ask_permission(tool, ask_permission)
         tool_specs.append(tool)
-    return tool_specs
+    return tuple(tool_specs)
 
 
 def construct_tool_parameters_from_json(

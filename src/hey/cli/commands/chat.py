@@ -6,9 +6,9 @@ from functools import partial
 from rich.console import Console
 from rich.rule import Rule
 
+from hey.domain.entities.agent import LLMAgentSpec
 from hey.domain.entities.llm import EmitLLMMessage, EmitLLMSignal, EmitToolResult
 from hey.domain.services.project import get_hey_dot_directory
-from hey.domain.services.workflow import LLMAgent
 from hey.infrastructure.chat import InMemoryChatRepository, SQLiteChatRepository
 from hey.infrastructure.llm import get_litellm_spec
 from hey.infrastructure.project import LocalProjectRepository
@@ -51,8 +51,8 @@ async def _run_chat(prompt: str, temporary: bool, new_session: bool) -> None:
     display = ChatDisplay(console)
     permission_lock = asyncio.Lock()
 
-    agent = LLMAgent(
-        spec=get_litellm_spec(model=project.config.chat.model, instructions=project.config.chat.instructions),
+    agent = LLMAgentSpec(
+        llm=get_litellm_spec(model=project.config.chat.model, instructions=project.config.chat.instructions),
         instructions=project.config.chat.instructions,
         response_format=str,
         tools=BuiltinToolRepository().get_all_specs(),

@@ -138,3 +138,12 @@ class EmitToolResult:
 
 
 type LLMEvent = EmitLLMSignal | EmitLLMMessage | EmitToolResult
+
+
+@dataclasses.dataclass(frozen=True)
+class RunToolCall:
+    record: ToolCallRecord
+    tool: ToolDefinition
+
+
+type LLMCmd = RunToolCall

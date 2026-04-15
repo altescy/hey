@@ -8,7 +8,9 @@ import pytest
 from hey.core.schema import generate_function_signature
 from hey.domain.entities.llm import (
     AssistantMessage,
+    EmitLLMMessage,
     LLMState,
+    RunToolCall,
     TextContent,
     ToolCallRecord,
     ToolDefinition,
@@ -17,13 +19,13 @@ from hey.domain.entities.llm import (
 )
 from hey.domain.entities.tool import ToolName, ToolSpec
 from hey.domain.services.llm import (
-    LLMAgentFinalizer,
-    LLMAgentInterpreter,
-    LLMAgentReducer,
-    LLMAgentUpdater,
-    RunToolCall,
     append_user_message,
+    finalize_llm,
+    interpret_llm_cmds,
+    is_llm_state_done,
+    reduce_llm_signal,
     truncate,
+    update_llm_state,
 )
 
 # ---------------------------------------------------------------------------
@@ -146,22 +148,15 @@ class TestTruncate:
 
 
 class TestLLMAgentReducer:
-    @pytest.fixture
-    def reducer(self) -> LLMAgentReducer:
-        return LLMAgentReducer()
-
-    def test_non_turn_done_emits_signal_and_accumulates(self, reducer) -> None:
-        signal = {"type": "text_delta", "index": 0, "delta": "hi"}
-        events, buffer = reducer(signal, None)
+    def test_non_turn_done_emits_signal_and_accumulates(self) -> None:
+        events, buffer = reduce_llm_signal(signal := {"type": "text_delta", "index": 0, "delta": "hi"}, None)
         assert len(events) == 1
         assert buffer.signals == (signal,)
 
-    def test_turn_done_emits_assistant_message_and_resets_buffer(self, reducer) -> None:
-        text_done = {"type": "text_part_done", "index": 0, "text": "hello"}
-        _, buf = reducer(text_done, None)
-        events, new_buf = reducer({"type": "turn_done"}, buf)
+    def test_turn_done_emits_assistant_message_and_resets_buffer(self) -> None:
+        _, buf = reduce_llm_signal({"type": "text_part_done", "index": 0, "text": "hello"}, None)
+        events, new_buf = reduce_llm_signal({"type": "turn_done"}, buf)
         assert len(events) == 1
-        from hey.domain.entities.llm import EmitLLMMessage
 
         assert isinstance(events[0], EmitLLMMessage)
         msg = events[0].message
@@ -169,24 +164,27 @@ class TestLLMAgentReducer:
         assert msg["parts"][0]["text"] == "hello"
         assert new_buf.signals == ()
 
-    def test_tool_call_part_done_is_included_in_turn(self, reducer) -> None:
-        tool_done = {
-            "type": "tool_call_part_done",
-            "index": 0,
-            "tool_call_id": "id1",
-            "tool_name": "my_tool",
-            "args_json": "{}",
-        }
-        _, buf = reducer(tool_done, None)
-        events, _ = reducer({"type": "turn_done"}, buf)
+    def test_tool_call_part_done_is_included_in_turn(self) -> None:
+        _, buf = reduce_llm_signal(
+            {
+                "type": "tool_call_part_done",
+                "index": 0,
+                "tool_call_id": "id1",
+                "tool_name": "my_tool",
+                "args_json": "{}",
+            },
+            None,
+        )
+        events, _ = reduce_llm_signal({"type": "turn_done"}, buf)
 
+        assert isinstance(events[0], EmitLLMMessage)
         msg = events[0].message
+        assert msg["role"] == "assistant"
         assert len(msg["tool_calls"]) == 1
         assert msg["tool_calls"][0]["name"] == "my_tool"
 
-    def test_none_buffer_is_treated_as_empty(self, reducer) -> None:
-        signal = {"type": "text_delta", "index": 0, "delta": "x"}
-        _, buffer = reducer(signal, None)
+    def test_none_buffer_is_treated_as_empty(self) -> None:
+        _, buffer = reduce_llm_signal({"type": "text_delta", "index": 0, "delta": "x"}, None)
         assert len(buffer.signals) == 1
 
 
@@ -196,50 +194,46 @@ class TestLLMAgentReducer:
 
 
 class TestLLMAgentUpdater:
-    @pytest.fixture
-    def updater(self) -> LLMAgentUpdater:
-        return LLMAgentUpdater()
-
-    def test_assistant_message_added_to_history(self, updater) -> None:
+    def test_assistant_message_added_to_history(self) -> None:
         state = LLMState(tools=(_tool_def("t"),))
         from hey.domain.entities.llm import EmitLLMMessage
 
         events = [EmitLLMMessage(_assistant("hi"))]
-        new_state, cmds = updater(events, state)
+        new_state, cmds = update_llm_state(events, state)
         assert len(new_state.history) == 1
         assert new_state.history[0]["role"] == "assistant"
         assert cmds == []
 
-    def test_tool_call_produces_run_command(self, updater) -> None:
+    def test_tool_call_produces_run_command(self) -> None:
         tool = _tool_def("my_tool")
         state = LLMState(tools=(tool,))
         call = _tool_call("my_tool")
         from hey.domain.entities.llm import EmitLLMMessage
 
         events = [EmitLLMMessage(_assistant("", tool_calls=(call,)))]
-        _, cmds = updater(events, state)
+        _, cmds = update_llm_state(events, state)
         assert len(cmds) == 1
         assert cmds[0].tool["name"] == "my_tool"
 
-    def test_unknown_tool_call_produces_error_result(self, updater) -> None:
+    def test_unknown_tool_call_produces_error_result(self) -> None:
         state = LLMState(tools=())
         call = _tool_call("nonexistent")
         from hey.domain.entities.llm import EmitLLMMessage
 
         events = [EmitLLMMessage(_assistant("", tool_calls=(call,)))]
-        new_state, cmds = updater(events, state)
+        new_state, cmds = update_llm_state(events, state)
         assert cmds == []
         # history should include the assistant message + an error tool_result
         roles = [m["role"] for m in new_state.history]
         assert "tool_result" in roles
 
-    def test_tool_result_event_added_to_history(self, updater) -> None:
+    def test_tool_result_event_added_to_history(self) -> None:
         state = LLMState()
         from hey.domain.entities.llm import EmitToolResult
 
         result_msg = _tool_result("c1", "ok")
         events = [EmitToolResult(message=result_msg, status="success")]
-        new_state, _ = updater(events, state)
+        new_state, _ = update_llm_state(events, state)
         assert new_state.history[-1]["role"] == "tool_result"
 
 
@@ -249,48 +243,38 @@ class TestLLMAgentUpdater:
 
 
 class TestLLMAgentFinalizer:
-    @pytest.fixture
-    def finalizer_no_finalizer_tool(self) -> LLMAgentFinalizer:
-        return LLMAgentFinalizer({})
+    def test_not_done_when_history_empty(self) -> None:
+        assert is_llm_state_done(LLMState()) is False
 
-    def test_not_done_when_history_empty(self, finalizer_no_finalizer_tool) -> None:
-        assert finalizer_no_finalizer_tool.is_done(LLMState()) is False
-
-    def test_done_when_last_message_is_assistant(self, finalizer_no_finalizer_tool) -> None:
+    def test_done_when_last_message_is_assistant(self) -> None:
         state = LLMState(history=(_user("hi"), _assistant("hello")))
-        assert finalizer_no_finalizer_tool.is_done(state) is True
+        assert is_llm_state_done(state) is True
 
-    def test_not_done_when_last_message_is_user(self, finalizer_no_finalizer_tool) -> None:
+    def test_not_done_when_last_message_is_user(self) -> None:
         state = LLMState(history=(_assistant("hi"), _user("more")))
-        assert finalizer_no_finalizer_tool.is_done(state) is False
+        assert is_llm_state_done(state) is False
 
-    def test_finalize_returns_assistant_text(self, finalizer_no_finalizer_tool) -> None:
+    def test_finalize_returns_assistant_text(self) -> None:
         state = LLMState(history=(_assistant("final answer"),))
-        result = finalizer_no_finalizer_tool.finalize(state)
+        result = finalize_llm(state)
         assert result == "final answer"
 
-    def test_finalize_raises_when_not_done(self, finalizer_no_finalizer_tool) -> None:
+    def test_finalize_raises_when_not_done(self) -> None:
         with pytest.raises(RuntimeError):
-            finalizer_no_finalizer_tool.finalize(LLMState())
+            finalize_llm(LLMState())
 
     def test_done_with_finalizer_tool_when_tool_called(self) -> None:
-        async def _finish(answer: str) -> str:
-            return answer
-
-        spec = _make_tool_spec("finish", _finish)
         finalizer_def = _tool_def("finish")
         state = LLMState(
             finalizer=finalizer_def,
             history=(_assistant("", tool_calls=(_tool_call("finish", '{"answer":"42"}'),)),),
         )
-        fin = LLMAgentFinalizer({ToolName("finish"): spec})
-        assert fin.is_done(state) is True
+        assert is_llm_state_done(state) is True
 
     def test_not_done_with_finalizer_tool_when_not_called(self) -> None:
         finalizer_def = _tool_def("finish")
         state = LLMState(finalizer=finalizer_def, history=(_assistant("hi"),))
-        fin = LLMAgentFinalizer({})
-        assert fin.is_done(state) is False
+        assert is_llm_state_done(state) is False
 
 
 # ---------------------------------------------------------------------------
@@ -301,8 +285,7 @@ class TestLLMAgentFinalizer:
 class TestLLMAgentInterpreter:
     @pytest.mark.asyncio
     async def test_returns_empty_for_no_commands(self) -> None:
-        interpreter = LLMAgentInterpreter({})
-        result = await interpreter([], LLMState())
+        result = await interpret_llm_cmds([], LLMState())
         assert result == []
 
     @pytest.mark.asyncio
@@ -311,13 +294,12 @@ class TestLLMAgentInterpreter:
             """Add two numbers."""
             return a + b
 
-        spec = _make_tool_spec("add", _add)
-        interpreter = LLMAgentInterpreter({ToolName("add"): spec})
+        tools = (_make_tool_spec("add", _add),)
         cmd = RunToolCall(
             record=_tool_call("add", json.dumps({"a": 1, "b": 2})),
             tool=_tool_def("add"),
         )
-        results = await interpreter([cmd], LLMState())
+        results = await interpret_llm_cmds([cmd], LLMState(), tools=tools)
         assert len(results) == 1
         assert results[0].status == "success"
         assert "3" in results[0].message["parts"][0]["text"]
@@ -328,10 +310,9 @@ class TestLLMAgentInterpreter:
             """Always fails."""
             raise ValueError("boom")
 
-        spec = _make_tool_spec("bad", _bad)
-        interpreter = LLMAgentInterpreter({ToolName("bad"): spec})
+        tools = (_make_tool_spec("bad", _bad),)
         cmd = RunToolCall(record=_tool_call("bad", '{"x": 1}'), tool=_tool_def("bad"))
-        results = await interpreter([cmd], LLMState())
+        results = await interpret_llm_cmds([cmd], LLMState(), tools=tools)
         assert results[0].status == "error"
 
     @pytest.mark.asyncio
@@ -340,10 +321,9 @@ class TestLLMAgentInterpreter:
             """Secret tool."""
             return key
 
-        spec = _make_tool_spec("secret", _secret, permission={"*": "deny"})
-        interpreter = LLMAgentInterpreter({ToolName("secret"): spec})
+        tools = (_make_tool_spec("secret", _secret, permission={"*": "deny"}),)
         cmd = RunToolCall(record=_tool_call("secret", '{"key": "x"}'), tool=_tool_def("secret"))
-        results = await interpreter([cmd], LLMState())
+        results = await interpret_llm_cmds([cmd], LLMState(), tools=tools)
         assert results[0].status == "denied"
 
     @pytest.mark.asyncio
@@ -357,12 +337,11 @@ class TestLLMAgentInterpreter:
             order.append(n)
             return n
 
-        spec = _make_tool_spec("slow", _slow)
-        interpreter = LLMAgentInterpreter({ToolName("slow"): spec})
+        tools = (_make_tool_spec("slow", _slow),)
         cmds = [
             RunToolCall(record=_tool_call("slow", f'{{"n": {i}}}', call_id=f"c{i}"), tool=_tool_def("slow"))
             for i in range(3)
         ]
-        results = await interpreter(cmds, LLMState())
+        results = await interpret_llm_cmds(cmds, LLMState(), tools=tools)
         assert len(results) == 3
         assert all(r.status == "success" for r in results)
