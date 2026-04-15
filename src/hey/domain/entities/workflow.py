@@ -1,7 +1,7 @@
 import dataclasses
 from typing import Any, Literal, NotRequired, TypedDict
 
-from hey.domain.entities.llm import LLMState
+from hey.domain.entities.llm import LLMEvent, LLMState
 
 
 class LLMWorkflowContextEphemeral(TypedDict):
@@ -43,4 +43,4 @@ class LLMWorkflowNodeCompleted[ResultT]:
     result: ResultT
 
 
-type LLMWorkflowEvent[ResultT] = LLMWorkflowNodeCompleted[ResultT]
+type LLMWorkflowEvent[ResultT] = LLMWorkflowNodeCompleted[ResultT] | LLMEvent

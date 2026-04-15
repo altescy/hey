@@ -3,7 +3,7 @@ import contextvars
 import dataclasses
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
-from typing import Any, Literal, assert_never
+from typing import Any, Literal, TypeGuard, assert_never
 
 from hey.core.agent import Reducer
 from hey.core.pattern import json_match
@@ -33,6 +33,10 @@ from hey.domain.services.tool import (
 
 _LLM_STATE = contextvars.ContextVar[LLMState | None]("_LLM_STATE", default=None)
 _MAX_TOOL_RESULT_BYTES = 50 * 1024  # 50 KB
+
+
+def is_llm_event(obj: Any) -> TypeGuard[LLMEvent]:
+    return isinstance(obj, (EmitLLMMessage, EmitLLMSignal, EmitToolResult))
 
 
 def append_user_message(state: LLMState, text: str) -> LLMState:

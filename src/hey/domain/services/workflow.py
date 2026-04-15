@@ -96,6 +96,10 @@ class LLMAgent[QueryT, ResponseT]:
             )
 
             response = self.run(prompt, state=local_state)
+
+            async for event in response.events():
+                yield Continue(event)
+
             next_local_state, result = await response.collect()
 
             yield Continue(
@@ -142,12 +146,12 @@ class LLMWorkflowHandler(BaseWorkflowHandler[LLMWorkflowState, LLMWorkflowEvent,
     def update(self, events: Sequence[LLMWorkflowEvent], state: LLMWorkflowState) -> LLMWorkflowState:
         for event in events:
             match event:
-                case LLMWorkflowNodeCompleted():
-                    match event.context["type"]:
+                case LLMWorkflowNodeCompleted() as workflow_event:
+                    match workflow_event.context["type"]:
                         case "new" | "continue":
                             state = dataclasses.replace(
                                 state,
-                                contexts={**state.contexts, event.context["context"]: event.state},
+                                contexts={**state.contexts, workflow_event.context["context"]: event.state},
                             )
                         case "fork" if "context" in event.context:
                             state = dataclasses.replace(
@@ -156,10 +160,11 @@ class LLMWorkflowHandler(BaseWorkflowHandler[LLMWorkflowState, LLMWorkflowEvent,
                             )
                     state = dataclasses.replace(
                         state,
-                        artifacts={**state.artifacts, **{event.node_name: event.result for event in events}},
+                        artifacts={
+                            **state.artifacts,
+                            **{workflow_event.node_name: workflow_event.result},
+                        },
                     )
-                case _:
-                    assert_never(event)
 
         return state
 
