@@ -20,7 +20,7 @@ class LLMWorkflowContextContinue(TypedDict):
 
 class LLMWorkflowContextFork(TypedDict):
     type: Literal["fork"]
-    source: str
+    origin: str
     context: NotRequired[str]
 
 

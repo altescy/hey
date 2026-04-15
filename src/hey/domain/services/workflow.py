@@ -159,7 +159,7 @@ def _resolve_local_state(
         case "continue":
             local_state = state.contexts.get(context["context"], LLMState())
         case "fork":
-            local_state = state.contexts.get(context["source"], LLMState())
+            local_state = state.contexts.get(context["origin"], LLMState())
         case _ as unknown:
             assert_never(unknown)
 
