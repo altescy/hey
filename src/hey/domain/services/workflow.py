@@ -5,7 +5,10 @@ from typing import Any, TypeGuard, assert_never
 
 from hey.core.agent import Reducer, make_agent_runtime, run_agent_loop
 from hey.core.workflow import BaseWorkflowHandler, Continue, Control, WorkflowNode, WorkflowResponse
+from hey.domain.entities.chat import ChatSessionID
 from hey.domain.entities.llm import (
+    EmitLLMMessage,
+    EmitToolResult,
     LLMEvent,
     LLMMessage,
     LLMSignal,
@@ -23,6 +26,7 @@ from hey.domain.entities.workflow import (
     LLMWorkflowNodeCompleted,
     LLMWorkflowState,
 )
+from hey.domain.repositories.chat import IChatRepository
 from hey.domain.services.llm import (
     LLMAgentFinalizer,
     LLMAgentInterpreter,
@@ -42,6 +46,18 @@ type OnEventCallback[EventT] = Callable[[EventT], Awaitable[None]]
 
 def is_llm_workflow_event(event: LLMWorkflowEvent) -> TypeGuard[LLMWorkflowNodeCompleted[Any]]:
     return isinstance(event, LLMWorkflowNodeCompleted)
+
+
+def create_on_event_callback_for_chat(
+    session_id: ChatSessionID,
+    repository: IChatRepository,
+) -> OnEventCallback[LLMEvent]:
+    async def on_event(event: LLMEvent) -> None:
+        match event:
+            case EmitLLMMessage(message=message) | EmitToolResult(message=message):
+                repository.create_message(session_id=session_id, message=message)
+
+    return on_event
 
 
 class LLMAgent[QueryT, ResponseT]:

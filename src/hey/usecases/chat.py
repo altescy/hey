@@ -8,12 +8,8 @@ from hey.domain.entities.llm import LLMEvent, LLMState
 from hey.domain.entities.project import ProjectID
 from hey.domain.repositories.chat import IChatRepository
 from hey.domain.services.chat import TIMEZONE
-from hey.domain.services.llm import (
-    EmitLLMMessage,
-    EmitToolResult,
-    append_user_message,
-)
-from hey.domain.services.workflow import LLMAgent
+from hey.domain.services.llm import append_user_message
+from hey.domain.services.workflow import LLMAgent, create_on_event_callback_for_chat
 
 
 class AgentChatUseCase:
@@ -56,12 +52,12 @@ class AgentChatUseCase:
         session_id: ChatSessionID,
         prompt: str,
     ) -> AsyncIterator[WorkflowResponse[LLMEvent, LLMState, str]]:
-        async def on_event(event: LLMEvent) -> None:
-            match event:
-                case EmitLLMMessage(message=message) | EmitToolResult(message=message):
-                    self._chat_repository.create_message(session_id=session_id, message=message)
 
         state = await self.get_llm_state(session_id)
         state = append_user_message(state, prompt)
         self._chat_repository.create_message(session_id=session_id, message=state.history[-1])
-        yield self._agent.run(prompt, state=state, on_event=on_event)
+        yield self._agent.run(
+            prompt,
+            state=state,
+            on_event=create_on_event_callback_for_chat(session_id, self._chat_repository),
+        )
