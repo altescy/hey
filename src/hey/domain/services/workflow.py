@@ -3,7 +3,16 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from functools import partial
 from typing import Any, TypeGuard, assert_never
 
-from hey.core.workflow import BaseWorkflowHandler, Continue, Control, WorkflowNode
+from hey.core.workflow import (
+    BaseWorkflowHandler,
+    Continue,
+    Control,
+    WorkflowExecutor,
+    WorkflowGraph,
+    WorkflowNode,
+    WorkflowProgressEvent,
+    WorkflowResponse,
+)
 from hey.domain.entities.agent import LLMAgentSpec
 from hey.domain.entities.llm import (
     LLMState,
@@ -142,6 +151,18 @@ class LLMWorkflowHandler(BaseWorkflowHandler[LLMWorkflowState, LLMWorkflowEvent,
 
     def finish(self, state: LLMWorkflowState) -> dict[str, Any]:
         return dict(state.artifacts)
+
+
+async def run_llm_workflow[ResultT](
+    graph: WorkflowGraph[LLMWorkflowState, LLMWorkflowEvent[ResultT], dict[str, Any]],
+    *,
+    state: LLMWorkflowState | None = None,
+    handler: BaseWorkflowHandler[LLMWorkflowState, LLMWorkflowEvent[ResultT], dict[str, Any]] | None = None,
+) -> WorkflowResponse[LLMWorkflowEvent[ResultT] | WorkflowProgressEvent, LLMWorkflowState, dict[str, Any]]:
+    state = state or LLMWorkflowState()
+    handler = handler or LLMWorkflowHandler()
+    executor = WorkflowExecutor(handler=handler)
+    return await executor(graph, state)
 
 
 def _resolve_local_state(
