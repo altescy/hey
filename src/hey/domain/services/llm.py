@@ -52,6 +52,13 @@ def make_llm_state(
     return LLMState(history=tuple(hitsory), tools=tuple(tools), finalizer=finalizer)
 
 
+def make_user_message(text: str) -> UserMessage:
+    return UserMessage(
+        role="user",
+        parts=(TextContent(type="text", text=text),),
+    )
+
+
 def is_llm_event(obj: Any) -> TypeGuard[LLMEvent]:
     return isinstance(obj, (EmitLLMMessage, EmitLLMSignal, EmitToolResult))
 
@@ -61,10 +68,7 @@ def set_message_history(state: LLMState, history: Sequence[LLMMessage]) -> LLMSt
 
 
 def append_user_message(state: LLMState, text: str) -> LLMState:
-    new_message = UserMessage(
-        role="user",
-        parts=(TextContent(type="text", text=text),),
-    )
+    new_message = make_user_message(text)
     return dataclasses.replace(state, history=state.history + (new_message,))
 
 

@@ -67,6 +67,7 @@ def run_llm_agent[QueryT, ResponseT](
 
     if prompt:
         state = append_user_message(state, prompt)
+
     return run_llm(
         spec=spec.llm,
         response_format=response_format_spec,

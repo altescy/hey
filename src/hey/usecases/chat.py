@@ -10,7 +10,7 @@ from hey.domain.entities.project import ProjectID
 from hey.domain.repositories.chat import IChatRepository
 from hey.domain.services.agent import run_llm_agent
 from hey.domain.services.chat import TIMEZONE
-from hey.domain.services.llm import append_user_message, make_llm_state, make_on_event_callback_for_chat
+from hey.domain.services.llm import make_llm_state, make_on_event_callback_for_chat, make_user_message
 
 
 class AgentChatUseCase[QueryT, ResponseT]:
@@ -55,8 +55,7 @@ class AgentChatUseCase[QueryT, ResponseT]:
     ) -> AsyncIterator[WorkflowResponse[LLMEvent, LLMState, ResponseT]]:
 
         state = await self.get_llm_state(session_id)
-        state = append_user_message(state, prompt)
-        self._chat_repository.create_message(session_id=session_id, message=state.history[-1])
+        self._chat_repository.create_message(session_id=session_id, message=make_user_message(prompt))
         yield run_llm_agent(
             spec=self._agent,
             prompt=prompt,
