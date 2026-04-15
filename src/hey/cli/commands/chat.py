@@ -8,6 +8,7 @@ from rich.rule import Rule
 
 from hey.domain.entities.llm import EmitLLMMessage, EmitLLMSignal, EmitToolResult
 from hey.domain.services.project import get_hey_dot_directory
+from hey.domain.services.workflow import LLMAgent
 from hey.infrastructure.chat import InMemoryChatRepository, SQLiteChatRepository
 from hey.infrastructure.llm import get_litellm_spec
 from hey.infrastructure.project import LocalProjectRepository
@@ -44,12 +45,20 @@ def run(args: argparse.Namespace) -> None:
 
 
 async def _run_chat(prompt: str, temporary: bool, new_session: bool) -> None:
-    project_use_case = ProjectUseCase(project_repository=LocalProjectRepository())
-    project = project_use_case.get_project(path=".")
+    project = ProjectUseCase(project_repository=LocalProjectRepository()).get_project(".")
 
     console = Console()
     display = ChatDisplay(console)
     permission_lock = asyncio.Lock()
+
+    agent = LLMAgent(
+        spec=get_litellm_spec(model=project.config.chat.model, instructions=project.config.chat.instructions),
+        instructions=project.config.chat.instructions,
+        response_format=str,
+        tools=BuiltinToolRepository().get_all_specs(),
+        permission=project.config.chat.permission,
+        ask_permission=partial(ask_permission, display, console, permission_lock),
+    )
 
     if temporary:
         chat_repository = InMemoryChatRepository()
@@ -57,11 +66,8 @@ async def _run_chat(prompt: str, temporary: bool, new_session: bool) -> None:
         chat_repository = SQLiteChatRepository(get_hey_dot_directory(project.directory) / "hey.db")
 
     chat_use_case = AgentChatUseCase(
-        permission=project.config.chat.permission,
-        llm_spec=get_litellm_spec(model=project.config.chat.model, instructions=project.config.chat.instructions),
+        agent=agent,
         chat_repository=chat_repository,
-        tool_repository=BuiltinToolRepository(),
-        ask_permission=partial(ask_permission, display, console, permission_lock),
     )
 
     is_new = True

@@ -1,7 +1,7 @@
 import dataclasses
 import json
 import typing
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from types import UnionType
 from typing import Any, Final, Union, cast
 
@@ -10,7 +10,14 @@ from pydantic import TypeAdapter
 
 from hey.core.schema import generate_function_signature, generate_json_schema
 from hey.domain.entities.llm import ToolDefinition
-from hey.domain.entities.tool import AskPermissionFunc, RenderMarkdownFunc, ToolName, ToolParamPermission, ToolSpec
+from hey.domain.entities.tool import (
+    AskPermissionFunc,
+    RenderMarkdownFunc,
+    ToolName,
+    ToolParamPermission,
+    ToolPermission,
+    ToolSpec,
+)
 
 _TOOL_RETURN_TA: Final = TypeAdapter(
     Any,
@@ -57,6 +64,22 @@ def override_tool_permission(spec: ToolSpec, permission: ToolParamPermission) ->
 
 def set_ask_permission(spec: ToolSpec, ask_permission: AskPermissionFunc) -> ToolSpec:
     return dataclasses.replace(spec, ask_permission=ask_permission)
+
+
+def setup_tool_permission(
+    tools: Iterable[ToolSpec],
+    permission: ToolPermission | None = None,
+    ask_permission: AskPermissionFunc | None = None,
+) -> list[ToolSpec]:
+    permission = permission or {}
+    tool_specs = []
+    for tool in tools:
+        if param_permission := permission.get(tool.name):
+            tool = override_tool_permission(tool, param_permission)
+        if ask_permission is not None:
+            tool = set_ask_permission(tool, ask_permission)
+        tool_specs.append(tool)
+    return tool_specs
 
 
 def construct_tool_parameters_from_json(

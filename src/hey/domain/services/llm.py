@@ -47,6 +47,12 @@ def append_user_message(state: LLMState, text: str) -> LLMState:
     return dataclasses.replace(state, history=state.history + (new_message,))
 
 
+def extend_tools(state: LLMState, tools: Sequence[ToolDefinition]) -> LLMState:
+    tools_dict = {tool["name"]: tool for tool in state.tools}
+    tools_dict.update({tool["name"]: tool for tool in tools})
+    return dataclasses.replace(state, tools=tuple(tools_dict.values()))
+
+
 def truncate(s: str, max_bytes: int, direction: Literal["head", "tail"] = "tail") -> str:
     encoded = s.encode("utf-8")
     if len(encoded) <= max_bytes:

@@ -41,7 +41,10 @@ def render_user_message_panel(message: LLMMessage, timestamp: str) -> object:
 
 
 def render_tool_call(record: ToolCallRecord, *, width: int | None = None) -> str:
-    params = ", ".join(f"{key}={render_text(json.dumps(val))}" for key, val in json.loads(record["args_json"]).items())
+    params = ", ".join(
+        f"{key}={render_text(json.dumps(val, ensure_ascii=False))}"
+        for key, val in json.loads(record["args_json"]).items()
+    )
     return render_text(f"[bold]{record['name']}[/bold]: {params}", width=width)
 
 

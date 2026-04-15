@@ -1,7 +1,7 @@
 import dataclasses
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from functools import partial
-from typing import Any, assert_never
+from typing import Any, TypeGuard, assert_never
 
 from hey.core.agent import Reducer, make_agent_runtime, run_agent_loop
 from hey.core.workflow import BaseWorkflowHandler, Continue, Control, WorkflowNode, WorkflowResponse
@@ -15,7 +15,7 @@ from hey.domain.entities.llm import (
     TextContent,
     UserMessage,
 )
-from hey.domain.entities.tool import ToolSpec
+from hey.domain.entities.tool import AskPermissionFunc, ToolPermission, ToolSpec
 from hey.domain.entities.workflow import (
     LLMWorkflowContext,
     LLMWorkflowContextEphemeral,
@@ -33,9 +33,15 @@ from hey.domain.services.tool import (
     dump_tool_result_to_json,
     generate_tool_definition_from_spec,
     generate_tool_spec_from_callable,
+    setup_tool_permission,
 )
 
 type PromptBuilder = Callable[[LLMWorkflowState], str]
+type OnEventCallback[EventT] = Callable[[EventT], Awaitable[None]]
+
+
+def is_llm_workflow_event(event: LLMWorkflowEvent) -> TypeGuard[LLMWorkflowNodeCompleted[Any]]:
+    return isinstance(event, LLMWorkflowNodeCompleted)
 
 
 class LLMAgent[QueryT, ResponseT]:
@@ -45,6 +51,8 @@ class LLMAgent[QueryT, ResponseT]:
         instructions: str,
         response_format: type[ResponseT] | Callable[..., ResponseT],
         tools: Sequence[ToolSpec] = (),
+        permission: ToolPermission | None = None,
+        ask_permission: AskPermissionFunc | None = None,
         reducer: Reducer[Any, LLMSignal, LLMEvent] | None = None,
     ) -> None:
         self._instructions = instructions
@@ -52,7 +60,7 @@ class LLMAgent[QueryT, ResponseT]:
         self._contextualizer = spec.contextualizer
         self._response_format = response_format
 
-        self._tools = tools
+        self._tools = setup_tool_permission(tools, permission, ask_permission)
         self._formatter = _build_finalizer_spec(response_format)
 
         tool_specs = {spec.name: spec for spec in self._tools}
@@ -124,6 +132,7 @@ class LLMAgent[QueryT, ResponseT]:
         prompt: str | None = None,
         *,
         state: LLMState | None = None,
+        on_event: OnEventCallback[LLMEvent] | None = None,
     ) -> WorkflowResponse[LLMEvent, LLMState, ResponseT]:
         state = state or self.make_state()
         if prompt:
@@ -139,6 +148,7 @@ class LLMAgent[QueryT, ResponseT]:
             interpret=self._interpreter,
             is_done=self._finalizer.is_done,
             finish=self._finalizer.finalize,
+            on_event=on_event,
         )
 
 
