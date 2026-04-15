@@ -45,11 +45,11 @@ type OnLLMEventCallback = Callable[[LLMEvent], Awaitable[None]]
 
 
 def make_llm_state(
-    hitsory: Sequence[LLMMessage] = (),
+    history: Sequence[LLMMessage] = (),
     tools: Sequence[ToolDefinition] = (),
     finalizer: ToolDefinition | None = None,
 ) -> LLMState:
-    return LLMState(history=tuple(hitsory), tools=tuple(tools), finalizer=finalizer)
+    return LLMState(history=tuple(history), tools=tuple(tools), finalizer=finalizer)
 
 
 def make_user_message(text: str) -> UserMessage:
