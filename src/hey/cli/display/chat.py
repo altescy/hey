@@ -6,13 +6,12 @@ from rich.columns import Columns
 from rich.console import Console, Group, RenderableType
 from rich.live import Live
 from rich.markdown import Markdown
-from rich.panel import Panel
 from rich.spinner import Spinner
-from rich.text import Text
 
 from hey.core.markdown import MarkdownBuffer, reduce_markdown
 from hey.domain.entities.llm import LLMMessage, ToolCallRecord, ToolResultMessage
 
+from ._utils import BorderedWriter
 from .console import get_console_width, render_llm_message, render_tool_call, tool_call_status_icon
 
 
@@ -27,7 +26,7 @@ class ChatDisplay:
         self._console = console
         self._live: Live | None = None
         self._phase = _Phase.IDLE
-        self._thinking = ""
+        self._thinking_writer: BorderedWriter | None = None
         self._md_buffer: MarkdownBuffer | None = None
         self._tool_calls: dict[str, ToolCallRecord] = {}
 
@@ -50,55 +49,50 @@ class ChatDisplay:
             self._live.update(renderable)
 
     def _streaming_renderable(self) -> RenderableType:
-        renderables: list[RenderableType] = []
-        if self._thinking:
-            renderables.append(self._render_thinking_panel(self._thinking))
-            renderables.append(Text(""))
         pending = self._md_buffer.text if self._md_buffer else ""
         if pending:
-            renderables.append(Markdown(pending))
-        return Group(*renderables)
+            return Markdown(pending)
+        return Group()
 
-    def _render_thinking_panel(self, text: str) -> RenderableType:
-        return Panel(
-            Text(text, style="dim"),
-            title="[dim]thinking[/dim]",
-            border_style="grey35",
-            style="on rgb(30,30,30)",
-            padding=(0, 1),
-        )
+    def _ensure_thinking_writer(self) -> BorderedWriter:
+        if self._thinking_writer is None:
+            self._stop_live()
+            self._console.print()
+            self._thinking_writer = BorderedWriter(
+                self._console,
+                border="┃",
+                style="dim",
+                border_style="grey35",
+                padding=1,
+            )
+            self._thinking_writer.write("[bold]thinking…[/bold]\n")
+        return self._thinking_writer
 
-    def _commit_thinking(self) -> None:
-        if self._thinking:
+    def _finish_thinking(self) -> None:
+        if self._thinking_writer is not None:
+            self._thinking_writer.finish()
+            self._thinking_writer = None
             self._console.print()
-            self._console.print(self._render_thinking_panel(self._thinking))
-            self._console.print()
-            self._thinking = ""
 
     def show_waiting(self) -> None:
         self._start_live(Columns([Spinner("dots")]))
         self._phase = _Phase.WAITING
 
     def append_thinking_delta(self, delta: str) -> None:
-        if self._phase != _Phase.STREAMING:
-            self._start_live(self._streaming_renderable())
-            self._phase = _Phase.STREAMING
-        self._thinking += delta
-        self._update_live(self._streaming_renderable())
+        self._phase = _Phase.STREAMING
+        writer = self._ensure_thinking_writer()
+        writer.write(delta)
 
     def set_thinking_text(self, text: str) -> None:
-        self._thinking = text
-        if self._phase == _Phase.STREAMING:
-            self._update_live(self._streaming_renderable())
+        pass
 
     def append_text_delta(self, delta: str) -> None:
         if self._phase != _Phase.STREAMING:
-            self._commit_thinking()
+            self._finish_thinking()
             self._start_live(self._streaming_renderable())
             self._phase = _Phase.STREAMING
-        elif self._thinking:
-            self._stop_live()
-            self._commit_thinking()
+        elif self._thinking_writer is not None:
+            self._finish_thinking()
             self._start_live(self._streaming_renderable())
 
         committed, self._md_buffer = reduce_markdown(delta, self._md_buffer)
@@ -113,7 +107,7 @@ class ChatDisplay:
     def commit_message(self, message: LLMMessage) -> None:
         self._stop_live()
         self._phase = _Phase.IDLE
-        self._commit_thinking()
+        self._finish_thinking()
         remaining = self._md_buffer.text if self._md_buffer else ""
         if remaining:
             self._console.print(Markdown(remaining))
@@ -156,10 +150,13 @@ async def ask_permission(
 ) -> Literal["allow", "deny"]:
     display.done()
     async with lock:
+        writer = BorderedWriter(console, border="┃", border_style="yellow", padding=1)
+        writer.write(f"[yellow]Permission required:[/yellow] {render_tool_call(record)}\n")
+        writer.finish()
         while True:
             answer = await asyncio.to_thread(
                 console.input,
-                f"[yellow]Permission required:[/yellow] {render_tool_call(record)}\nAllow this tool call? (y/n) ",
+                f"{writer.prefix}Allow this tool call? (y/n) ",
             )
             console.print()
             match answer.lower():

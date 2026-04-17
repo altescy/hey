@@ -1,5 +1,4 @@
 import json
-import textwrap
 from typing import Literal, assert_never
 
 from rich.console import Console
@@ -18,9 +17,13 @@ def get_console_width(console: Console) -> int:
 
 def render_text(o: object, *, width: int | None = None, escape: bool = True) -> str:
     text = (repr(o)[1:-1] if escape else o) if isinstance(o, str) else repr(o)
-    if width is not None:
-        return textwrap.shorten(text, width=width, placeholder="…")
-    return text
+    if width is not None and width > 0:
+        t = Text.from_markup(str(text))
+        if t.cell_len > width:
+            t.truncate(max(width - 1, 0), overflow="ellipsis", pad=False)
+            t.append("…")
+        return t.markup
+    return str(text)
 
 
 def render_llm_message(message: LLMMessage, *, width: int | None = None, escape: bool = True) -> str:
@@ -44,7 +47,7 @@ def render_tool_call(record: ToolCallRecord, *, width: int | None = None) -> str
         f"{key}={render_text(json.dumps(val, ensure_ascii=False))}"
         for key, val in json.loads(record["args_json"]).items()
     )
-    return render_text(f"[bold]{record['name']}[/bold]: {params}", width=width)
+    return render_text(f"[bold]{record['name']}[/bold]: [dim]{params}[/dim]", width=width)
 
 
 def tool_call_status_icon(status: Literal["success", "error", "denied"]) -> str:
