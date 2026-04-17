@@ -127,6 +127,7 @@ class ChatDisplay:
 
         record = self._tool_calls.pop(result["tool_call_id"], None)
         if record is not None:
+            self._console.print()
             self._console.print(f"{tool_call_status_icon(status)} {render_tool_call(record)}")
             if markdown:
                 self._console.print()
@@ -134,7 +135,7 @@ class ChatDisplay:
                 self._console.print()
             else:
                 self._console.print(
-                    f"    [dim]╰─ {render_llm_message(result, width=get_console_width(self._console) - 6)}[/dim]\n"
+                    f"  [dim]╰─ {render_llm_message(result, width=get_console_width(self._console) - 6)}[/dim]"
                 )
 
     def done(self) -> None:
@@ -150,15 +151,16 @@ async def ask_permission(
 ) -> Literal["allow", "deny"]:
     display.done()
     async with lock:
+        console.print()
         writer = BorderedWriter(console, border="┃", border_style="yellow", padding=1)
-        writer.write(f"[black bold on yellow] Permission required [/black bold on yellow] {render_tool_call(record)}\n")
+        writer.write(f"[black bold on yellow] Permission required [/black bold on yellow] {render_tool_call(record)}")
         writer.finish()
         while True:
             answer = await asyncio.to_thread(
                 console.input,
                 f"{writer.prefix}Allow this tool call? (y/n) ",
             )
-            console.print()
+            # console.print()
             match answer.lower():
                 case "y":
                     return "allow"
