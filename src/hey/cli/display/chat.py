@@ -10,6 +10,7 @@ from rich.panel import Panel
 from rich.spinner import Spinner
 from rich.text import Text
 
+from hey.core.markdown import MarkdownBuffer, reduce_markdown
 from hey.domain.entities.llm import LLMMessage, ToolCallRecord, ToolResultMessage
 
 from .console import get_console_width, render_llm_message, render_tool_call, tool_call_status_icon
@@ -27,7 +28,7 @@ class ChatDisplay:
         self._live: Live | None = None
         self._phase = _Phase.IDLE
         self._thinking = ""
-        self._markdown = Markdown("")
+        self._md_buffer: MarkdownBuffer | None = None
         self._tool_calls: dict[str, ToolCallRecord] = {}
 
     @property
@@ -53,7 +54,9 @@ class ChatDisplay:
         if self._thinking:
             renderables.append(self._render_thinking_panel(self._thinking))
             renderables.append(Text(""))
-        renderables.append(self._markdown)
+        pending = self._md_buffer.text if self._md_buffer else ""
+        if pending:
+            renderables.append(Markdown(pending))
         return Group(*renderables)
 
     def _render_thinking_panel(self, text: str) -> RenderableType:
@@ -64,6 +67,13 @@ class ChatDisplay:
             style="on rgb(30,30,30)",
             padding=(0, 1),
         )
+
+    def _commit_thinking(self) -> None:
+        if self._thinking:
+            self._console.print()
+            self._console.print(self._render_thinking_panel(self._thinking))
+            self._console.print()
+            self._thinking = ""
 
     def show_waiting(self) -> None:
         self._start_live(Columns([Spinner("dots")]))
@@ -83,21 +93,31 @@ class ChatDisplay:
 
     def append_text_delta(self, delta: str) -> None:
         if self._phase != _Phase.STREAMING:
+            self._commit_thinking()
             self._start_live(self._streaming_renderable())
             self._phase = _Phase.STREAMING
-        self._markdown = Markdown(self._markdown.markup + delta)
+        elif self._thinking:
+            self._stop_live()
+            self._commit_thinking()
+            self._start_live(self._streaming_renderable())
+
+        committed, self._md_buffer = reduce_markdown(delta, self._md_buffer)
+        if committed:
+            self._stop_live()
+            for block in committed:
+                self._console.print(Markdown(block))
+            self._start_live(self._streaming_renderable())
+
         self._update_live(self._streaming_renderable())
 
     def commit_message(self, message: LLMMessage) -> None:
         self._stop_live()
         self._phase = _Phase.IDLE
-        if self._thinking:
-            self._console.print()
-            self._console.print(self._render_thinking_panel(self._thinking))
-            self._console.print()
-        self._console.print(Markdown(render_llm_message(message, escape=False)))
-        self._thinking = ""
-        self._markdown = Markdown("")
+        self._commit_thinking()
+        remaining = self._md_buffer.text if self._md_buffer else ""
+        if remaining:
+            self._console.print(Markdown(remaining))
+        self._md_buffer = None
 
     def add_pending_tool_call(self, record: ToolCallRecord) -> None:
         self._tool_calls[record["id"]] = record
