@@ -1,5 +1,5 @@
 import asyncio
-from types import TracebackType
+from enum import Enum, auto
 from typing import Literal
 
 from rich.columns import Columns
@@ -15,24 +15,45 @@ from hey.domain.entities.llm import LLMMessage, ToolCallRecord, ToolResultMessag
 from .console import get_console_width, render_llm_message, render_tool_call, tool_call_status_icon
 
 
+class _Phase(Enum):
+    IDLE = auto()
+    WAITING = auto()
+    STREAMING = auto()
+
+
 class ChatDisplay:
     def __init__(self, console: Console) -> None:
         self._console = console
+        self._live: Live | None = None
+        self._phase = _Phase.IDLE
         self._thinking = ""
         self._markdown = Markdown("")
-        self._pending: dict[str, tuple[ToolCallRecord, Columns]] = {}
-        self._deferred_output: list[RenderableType] = []
-        self._live = Live(self._renderable(), console=console, refresh_per_second=16, transient=True, screen=False)
-        self._stop_count = 0
+        self._tool_calls: dict[str, ToolCallRecord] = {}
 
-    def _renderable(self) -> RenderableType:
+    @property
+    def has_pending_tool_calls(self) -> bool:
+        return bool(self._tool_calls)
 
+    def _start_live(self, renderable: RenderableType) -> None:
+        self._stop_live()
+        self._live = Live(renderable, console=self._console, refresh_per_second=24, transient=True, screen=False)
+        self._live.start()
+
+    def _stop_live(self) -> None:
+        if self._live is not None:
+            self._live.stop()
+            self._live = None
+
+    def _update_live(self, renderable: RenderableType) -> None:
+        if self._live is not None:
+            self._live.update(renderable)
+
+    def _streaming_renderable(self) -> RenderableType:
         renderables: list[RenderableType] = []
         if self._thinking:
             renderables.append(self._render_thinking_panel(self._thinking))
             renderables.append(Text(""))
         renderables.append(self._markdown)
-        renderables.extend(line for _, line in self._pending.values())
         return Group(*renderables)
 
     def _render_thinking_panel(self, text: str) -> RenderableType:
@@ -44,70 +65,42 @@ class ChatDisplay:
             padding=(0, 1),
         )
 
-    def _refresh(self) -> None:
-        self._live.update(self._renderable())
-
-    def _print(self, renderable: RenderableType) -> None:
-        if self._stop_count > 0:
-            self._deferred_output.append(renderable)
-            return
-        self._live.console.print(renderable)
-
-    def __enter__(self) -> "ChatDisplay":
-        self._live.__enter__()
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        self._live.__exit__(exc_type, exc_val, exc_tb)
-
-    def stop(self) -> None:
-        self._stop_count += 1
-        if self._stop_count == 1:
-            self._live.stop()
-
-    def start(self) -> None:
-        if self._stop_count <= 0:
-            return
-        self._stop_count -= 1
-        if self._stop_count == 0:
-            self._live.start()
-            for renderable in self._deferred_output:
-                self._live.console.print(renderable)
-            self._deferred_output.clear()
-            self._refresh()
-
-    def append_text_delta(self, delta: str) -> None:
-        self._markdown = Markdown(self._markdown.markup + delta)
-        self._refresh()
+    def show_waiting(self) -> None:
+        self._start_live(Columns([Spinner("dots")]))
+        self._phase = _Phase.WAITING
 
     def append_thinking_delta(self, delta: str) -> None:
+        if self._phase != _Phase.STREAMING:
+            self._start_live(self._streaming_renderable())
+            self._phase = _Phase.STREAMING
         self._thinking += delta
-        self._refresh()
+        self._update_live(self._streaming_renderable())
 
     def set_thinking_text(self, text: str) -> None:
         self._thinking = text
-        self._refresh()
+        if self._phase == _Phase.STREAMING:
+            self._update_live(self._streaming_renderable())
+
+    def append_text_delta(self, delta: str) -> None:
+        if self._phase != _Phase.STREAMING:
+            self._start_live(self._streaming_renderable())
+            self._phase = _Phase.STREAMING
+        self._markdown = Markdown(self._markdown.markup + delta)
+        self._update_live(self._streaming_renderable())
 
     def commit_message(self, message: LLMMessage) -> None:
+        self._stop_live()
+        self._phase = _Phase.IDLE
         if self._thinking:
-            self._print(Text(""))
-            self._print(self._render_thinking_panel(self._thinking))
-            self._print(Text(""))
-        self._print(Markdown(render_llm_message(message, escape=False)))
+            self._console.print()
+            self._console.print(self._render_thinking_panel(self._thinking))
+            self._console.print()
+        self._console.print(Markdown(render_llm_message(message, escape=False)))
         self._thinking = ""
         self._markdown = Markdown("")
-        self._pending.clear()
-        self._refresh()
 
     def add_pending_tool_call(self, record: ToolCallRecord) -> None:
-        line = Columns([Spinner("dots"), Text.from_markup(render_tool_call(record))])
-        self._pending[record["id"]] = (record, line)
-        self._refresh()
+        self._tool_calls[record["id"]] = record
 
     def finish_tool_call(
         self,
@@ -115,21 +108,24 @@ class ChatDisplay:
         status: Literal["success", "error", "denied"],
         markdown: str | None = None,
     ) -> None:
-        entry = self._pending.pop(result["tool_call_id"], None)
-        if entry is None and self._pending:
-            key = next(iter(self._pending))
-            entry = self._pending.pop(key)
-        if entry is None:
-            return
-        record, _ = entry
-        self._print(f"{tool_call_status_icon(status)} {render_tool_call(record)}")
-        if markdown:
-            self._print(Text(""))
-            self._print(Markdown(markdown))
-            self._print(Text(""))
-        else:
-            self._print(f"    [dim]╰─ {render_llm_message(result, width=get_console_width(self._console) - 6)}[/dim]\n")
-        self._refresh()
+        self._stop_live()
+        self._phase = _Phase.IDLE
+
+        record = self._tool_calls.pop(result["tool_call_id"], None)
+        if record is not None:
+            self._console.print(f"{tool_call_status_icon(status)} {render_tool_call(record)}")
+            if markdown:
+                self._console.print()
+                self._console.print(Markdown(markdown))
+                self._console.print()
+            else:
+                self._console.print(
+                    f"    [dim]╰─ {render_llm_message(result, width=get_console_width(self._console) - 6)}[/dim]\n"
+                )
+
+    def done(self) -> None:
+        self._stop_live()
+        self._phase = _Phase.IDLE
 
 
 async def ask_permission(
@@ -138,19 +134,16 @@ async def ask_permission(
     lock: asyncio.Lock,
     record: ToolCallRecord,
 ) -> Literal["allow", "deny"]:
-    display.stop()
-    try:
-        async with lock:
-            while True:
-                answer = await asyncio.to_thread(
-                    console.input,
-                    f"\n[yellow]Permission required:[/yellow] {render_tool_call(record)}\nAllow this tool call? (y/n) ",
-                )
-                console.print("\n")
-                match answer.lower():
-                    case "y":
-                        return "allow"
-                    case "n":
-                        return "deny"
-    finally:
-        display.start()
+    display.done()
+    async with lock:
+        while True:
+            answer = await asyncio.to_thread(
+                console.input,
+                f"[yellow]Permission required:[/yellow] {render_tool_call(record)}\nAllow this tool call? (y/n) ",
+            )
+            console.print()
+            match answer.lower():
+                case "y":
+                    return "allow"
+                case "n":
+                    return "deny"

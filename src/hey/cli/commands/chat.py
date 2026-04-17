@@ -83,22 +83,25 @@ async def _run_chat(prompt: str, temporary: bool, new_session: bool) -> None:
         console.print(Rule(f"[dim]New session started  ·  Session {session.id}[/dim]", style="dim"))
         console.print()
 
-    with display:
-        async with chat_use_case.run(session_id=session.id, prompt=prompt) as response:
-            async for event in response.events():
-                match event:
-                    case EmitLLMSignal(signal={"type": "thinking_delta", "delta": delta}):
-                        display.append_thinking_delta(delta)
-                    case EmitLLMSignal(signal={"type": "thinking_part_done", "text": text}):
-                        display.set_thinking_text(text)
-                    case EmitLLMSignal(signal={"type": "text_delta", "delta": delta}):
-                        display.append_text_delta(delta)
-                    case EmitLLMMessage(message=message):
-                        display.commit_message(message)
-                        if message["role"] == "assistant":
-                            for record in message["tool_calls"]:
-                                display.add_pending_tool_call(record)
-                    case EmitToolResult(message=message, status=status, view=markdown):
-                        display.finish_tool_call(message, status, markdown)
+    display.show_waiting()
+    async with chat_use_case.run(session_id=session.id, prompt=prompt) as response:
+        async for event in response.events():
+            match event:
+                case EmitLLMSignal(signal={"type": "thinking_delta", "delta": delta}):
+                    display.append_thinking_delta(delta)
+                case EmitLLMSignal(signal={"type": "thinking_part_done", "text": text}):
+                    display.set_thinking_text(text)
+                case EmitLLMSignal(signal={"type": "text_delta", "delta": delta}):
+                    display.append_text_delta(delta)
+                case EmitLLMMessage(message=message):
+                    display.commit_message(message)
+                    if message["role"] == "assistant":
+                        for record in message["tool_calls"]:
+                            display.add_pending_tool_call(record)
+                case EmitToolResult(message=message, status=status, view=markdown):
+                    display.finish_tool_call(message, status, markdown)
+                    if not display.has_pending_tool_calls:
+                        display.show_waiting()
+    display.done()
 
     await response.collect()
