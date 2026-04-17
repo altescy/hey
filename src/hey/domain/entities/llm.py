@@ -46,12 +46,51 @@ class ToolCallPartDone(TypedDict):
     args_json: str  # fully accumulated JSON-serialized args of this part
 
 
+class ThinkingPartStarted(TypedDict):
+    type: Literal["thinking_part_started"]
+    index: int
+
+
+class ThinkingDelta(TypedDict):
+    type: Literal["thinking_delta"]
+    index: int
+    delta: str
+
+
+class ThinkingPartDone(TypedDict):
+    type: Literal["thinking_part_done"]
+    index: int
+    text: str
+
+
+class Usage(TypedDict, total=False):
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_write_tokens: int
+    reasoning_tokens: int
+
+
+type FinishReason = Literal["stop", "tool_calls", "length", "content_filter"]
+
+
 class TurnDone(TypedDict):
     type: Literal["turn_done"]
+    reason: FinishReason
+    usage: Usage
 
 
 type LLMSignal = Annotated[
-    TextPartStarted | TextDelta | TextPartDone | ToolCallPartStarted | ToolCallArgsDelta | ToolCallPartDone | TurnDone,
+    TextPartStarted
+    | TextDelta
+    | TextPartDone
+    | ToolCallPartStarted
+    | ToolCallArgsDelta
+    | ToolCallPartDone
+    | ThinkingPartStarted
+    | ThinkingDelta
+    | ThinkingPartDone
+    | TurnDone,
     Discriminator("type"),
 ]
 

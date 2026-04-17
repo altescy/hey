@@ -155,7 +155,7 @@ class TestLLMAgentReducer:
 
     def test_turn_done_emits_assistant_message_and_resets_buffer(self) -> None:
         _, buf = reduce_llm_signal({"type": "text_part_done", "index": 0, "text": "hello"}, None)
-        events, new_buf = reduce_llm_signal({"type": "turn_done"}, buf)
+        events, new_buf = reduce_llm_signal({"type": "turn_done", "reason": "stop", "usage": {}}, buf)
         assert len(events) == 1
 
         assert isinstance(events[0], EmitLLMMessage)
@@ -175,7 +175,7 @@ class TestLLMAgentReducer:
             },
             None,
         )
-        events, _ = reduce_llm_signal({"type": "turn_done"}, buf)
+        events, _ = reduce_llm_signal({"type": "turn_done", "reason": "stop", "usage": {}}, buf)
 
         assert isinstance(events[0], EmitLLMMessage)
         msg = events[0].message

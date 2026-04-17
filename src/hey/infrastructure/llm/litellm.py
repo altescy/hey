@@ -6,6 +6,7 @@ from typing import Any, assert_never
 from hey.domain.entities.llm import (
     Contextualizer,
     Engine,
+    FinishReason,
     LLMMessage,
     LLMSignal,
     LLMSpec,
@@ -15,11 +16,15 @@ from hey.domain.entities.llm import (
     TextDelta,
     TextPartDone,
     TextPartStarted,
+    ThinkingDelta,
+    ThinkingPartDone,
+    ThinkingPartStarted,
     ToolCallArgsDelta,
     ToolCallPartDone,
     ToolCallPartStarted,
     ToolDefinition,
     TurnDone,
+    Usage,
 )
 
 
@@ -104,6 +109,10 @@ class LiteLLMEngine(Engine[LiteLLMQuery, LLMSignal]):
             text_part_open: bool = False
             text_part_index: int = 0
 
+            thinking_buf: str = ""
+            thinking_part_open: bool = False
+            thinking_part_index: int = -1  # will be assigned when opened
+
             tc_parts: dict[int, _PartialTC] = {}
             tc_part_index_base: int = 1
 
@@ -122,12 +131,37 @@ class LiteLLMEngine(Engine[LiteLLMQuery, LLMSignal]):
 
             assert isinstance(response, AsyncIterator)
 
+            finish_reason: FinishReason = "stop"
+            usage: Usage = {}
+
             async for chunk in response:
+                if chunk_usage := getattr(chunk, "usage", None):
+                    usage = {}
+                    if prompt_tokens := getattr(chunk_usage, "prompt_tokens", None):
+                        usage["input_tokens"] = prompt_tokens
+                    if completion_tokens := getattr(chunk_usage, "completion_tokens", None):
+                        usage["output_tokens"] = completion_tokens
+
                 choice = chunk.choices[0] if chunk.choices else None
                 if choice is None:
                     continue
 
                 delta = choice.delta
+
+                # --- thinking ---
+                thinking_text: str | None = getattr(delta, "thinking", None) or getattr(
+                    delta, "reasoning_content", None
+                )
+                if thinking_text:
+                    if not thinking_part_open:
+                        thinking_part_open = True
+                        thinking_part_index = 0
+                        # Push text part index up
+                        text_part_index = 1
+                        tc_part_index_base = 2
+                        yield ThinkingPartStarted(type="thinking_part_started", index=thinking_part_index)
+                    thinking_buf += thinking_text
+                    yield ThinkingDelta(type="thinking_delta", index=thinking_part_index, delta=thinking_text)
 
                 # --- text ---
                 if delta.content:
@@ -169,6 +203,16 @@ class LiteLLMEngine(Engine[LiteLLMQuery, LLMSignal]):
                             tc_parts[idx].args_buf += args_frag
                             yield ToolCallArgsDelta(type="tool_call_args_delta", index=part_index, delta=args_frag)
 
+                if choice.finish_reason in ("stop", "tool_calls", "length", "content_filter"):
+                    finish_reason = choice.finish_reason
+
+            if thinking_part_open:
+                yield ThinkingPartDone(
+                    type="thinking_part_done",
+                    index=thinking_part_index,
+                    text=thinking_buf,
+                )
+
             if text_part_open:
                 yield TextPartDone(type="text_part_done", index=text_part_index, text=text_buf)
 
@@ -182,7 +226,7 @@ class LiteLLMEngine(Engine[LiteLLMQuery, LLMSignal]):
                     args_json=part.args_buf,
                 )
 
-            yield TurnDone(type="turn_done")
+            yield TurnDone(type="turn_done", reason=finish_reason, usage=usage)
 
         yield _stream()
 
