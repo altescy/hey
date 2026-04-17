@@ -151,7 +151,7 @@ async def ask_permission(
     display.done()
     async with lock:
         writer = BorderedWriter(console, border="┃", border_style="yellow", padding=1)
-        writer.write(f"[yellow]Permission required:[/yellow] {render_tool_call(record)}\n")
+        writer.write(f"[black bold on yellow] Permission required [/black bold on yellow] {render_tool_call(record)}\n")
         writer.finish()
         while True:
             answer = await asyncio.to_thread(
