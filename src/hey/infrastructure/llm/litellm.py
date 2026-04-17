@@ -127,6 +127,7 @@ class LiteLLMEngine(Engine[LiteLLMQuery, LLMSignal]):
                     *((self._tool_to_litellm(query.finalizer),) if query.finalizer else ()),
                 ],
                 stream=True,
+                reasoning_effort="medium",
             )
 
             assert isinstance(response, AsyncIterator)
@@ -218,10 +219,11 @@ class LiteLLMEngine(Engine[LiteLLMQuery, LLMSignal]):
 
             for idx, part in tc_parts.items():
                 part_index = tc_part_index_base + idx
+                tool_call_id = part.tool_call_id or f"call_{idx}"
                 yield ToolCallPartDone(
                     type="tool_call_part_done",
                     index=part_index,
-                    tool_call_id=part.tool_call_id,
+                    tool_call_id=tool_call_id,
                     tool_name=part.tool_name,
                     args_json=part.args_buf,
                 )

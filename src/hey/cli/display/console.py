@@ -3,6 +3,8 @@ import textwrap
 from typing import Literal, assert_never
 
 from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
 
 from hey.domain.entities.llm import LLMMessage, ToolCallRecord
 
@@ -26,9 +28,6 @@ def render_llm_message(message: LLMMessage, *, width: int | None = None, escape:
 
 
 def render_user_message_panel(message: LLMMessage, timestamp: str) -> object:
-    from rich.panel import Panel
-    from rich.text import Text
-
     content = "".join(part["text"] for part in message["parts"])
     header = Text(f"You  {timestamp}", style="dim")
     return Panel(
