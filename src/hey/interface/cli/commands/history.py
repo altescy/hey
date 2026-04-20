@@ -4,12 +4,13 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.rule import Rule
 
+from hey.application.dto import GetProjectInput
+from hey.application.usecases.project import ProjectUseCase
 from hey.domain.entities.chat import ChatMessage
 from hey.domain.entities.llm import ToolResultMessage
 from hey.domain.services.project import get_hey_dot_directory
 from hey.infrastructure.chat import SQLiteChatRepository
 from hey.infrastructure.project import LocalProjectRepository
-from hey.usecases.project import ProjectUseCase
 
 from ..display.console import render_tool_call, render_user_message_panel
 
@@ -26,7 +27,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 def run(args: argparse.Namespace) -> None:
     project_use_case = ProjectUseCase(project_repository=LocalProjectRepository())
-    project = project_use_case.get_project(path=".")
+    project = project_use_case.get_project(GetProjectInput(path="."))["project"]
 
     db_path = get_hey_dot_directory(project.directory) / "hey.db"
     chat_repository = SQLiteChatRepository(db_path)

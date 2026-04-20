@@ -6,11 +6,17 @@ from functools import partial
 from rich.console import Console
 from rich.rule import Rule
 
+from hey.application.dto import (
+    CreateSessionInput,
+    GetOrCreateSessionInput,
+    GetProjectInput,
+    RunChatInput,
+)
+from hey.application.usecases.chat import AgentChatUseCase
+from hey.application.usecases.project import ProjectUseCase
 from hey.bootstrap import build_agent_spec, build_chat_repository
 from hey.domain.entities.llm import EmitLLMMessage, EmitLLMSignal, EmitToolResult
 from hey.infrastructure.project import LocalProjectRepository
-from hey.usecases.chat import AgentChatUseCase
-from hey.usecases.project import ProjectUseCase
 
 from ..display.chat import ChatDisplay, ask_permission
 
@@ -41,7 +47,8 @@ def run(args: argparse.Namespace) -> None:
 
 
 async def _run_chat(prompt: str, temporary: bool, new_session: bool) -> None:
-    project = ProjectUseCase(project_repository=LocalProjectRepository()).get_project(".")
+    output = ProjectUseCase(project_repository=LocalProjectRepository()).get_project(GetProjectInput(path="."))
+    project = output["project"]
 
     console = Console()
     display = ChatDisplay(console)
@@ -57,19 +64,19 @@ async def _run_chat(prompt: str, temporary: bool, new_session: bool) -> None:
 
     is_new = True
     if new_session or temporary:
-        session = await chat_use_case.create_session(project_id=project.id)
+        session = (await chat_use_case.create_session(CreateSessionInput(project_id=project.id)))["session"]
     else:
-        session, is_new = await chat_use_case.get_or_create_session(
-            project_id=project.id,
-            session_timeout=project.config.chat.session_timeout,
+        result = await chat_use_case.get_or_create_session(
+            GetOrCreateSessionInput(project_id=project.id, session_timeout=project.config.chat.session_timeout)
         )
+        session, is_new = result["session"], result["is_new"]
 
     if is_new and not temporary:
         console.print(Rule(f"[dim]New session started  ·  Session {session.id}[/dim]", style="dim"))
         console.print()
 
     display.show_waiting()
-    async with chat_use_case.run(session_id=session.id, prompt=prompt) as response:
+    async with chat_use_case.run(RunChatInput(session_id=session.id, prompt=prompt)) as response:
         async for event in response.events():
             match event:
                 case EmitLLMSignal(signal={"type": "thinking_delta", "delta": delta}):

@@ -155,7 +155,7 @@ async def login_browser(port: int = 1455) -> None:
     received_state: list[str] = []
 
     class _Handler(BaseHTTPRequestHandler):
-        def log_message(self, *_: Any) -> None:  # silence access log
+        def log_message(self, format, *args):
             pass
 
         def do_GET(self) -> None:

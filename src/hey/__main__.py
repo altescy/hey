@@ -1,4 +1,4 @@
-from hey.cli import main
+from hey.interface.cli import main
 
 
 def run() -> None:

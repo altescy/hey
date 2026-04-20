@@ -2,7 +2,7 @@ from io import StringIO
 
 from rich.console import Console
 
-from hey.cli.display._utils import BorderedWriter
+from hey.interface.cli.display._utils import BorderedWriter
 
 
 def _make_console(width: int = 40) -> Console:
