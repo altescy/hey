@@ -6,13 +6,9 @@ from functools import partial
 from rich.console import Console
 from rich.rule import Rule
 
-from hey.domain.entities.agent import LLMAgentSpec
+from hey.bootstrap import build_agent_spec, build_chat_repository
 from hey.domain.entities.llm import EmitLLMMessage, EmitLLMSignal, EmitToolResult
-from hey.domain.services.project import get_hey_dot_directory
-from hey.infrastructure.chat import InMemoryChatRepository, SQLiteChatRepository
-from hey.infrastructure.llm import get_litellm_spec
 from hey.infrastructure.project import LocalProjectRepository
-from hey.infrastructure.tool import BuiltinToolRepository
 from hey.usecases.chat import AgentChatUseCase
 from hey.usecases.project import ProjectUseCase
 
@@ -51,24 +47,13 @@ async def _run_chat(prompt: str, temporary: bool, new_session: bool) -> None:
     display = ChatDisplay(console)
     permission_lock = asyncio.Lock()
 
-    agent = LLMAgentSpec(
-        llm=get_litellm_spec(model=project.config.chat.model, instructions=project.config.chat.instructions),
-        instructions=project.config.chat.instructions,
-        response_format=str,
-        tools=BuiltinToolRepository().get_all_specs(),
-        permission=project.config.chat.permission,
+    agent = build_agent_spec(
+        project.config.chat,
         ask_permission=partial(ask_permission, display, console, permission_lock),
     )
+    chat_repository = build_chat_repository(project.directory, temporary=temporary)
 
-    if temporary:
-        chat_repository = InMemoryChatRepository()
-    else:
-        chat_repository = SQLiteChatRepository(get_hey_dot_directory(project.directory) / "hey.db")
-
-    chat_use_case = AgentChatUseCase(
-        agent=agent,
-        chat_repository=chat_repository,
-    )
+    chat_use_case = AgentChatUseCase(agent=agent, chat_repository=chat_repository)
 
     is_new = True
     if new_session or temporary:

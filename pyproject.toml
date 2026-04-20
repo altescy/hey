@@ -20,6 +20,12 @@ hey = "hey.__main__:run"
 litellm = [
     "litellm>=1.83.4",
 ]
+copilot = [
+    "httpx>=0.28.0",
+]
+codex = [
+    "httpx>=0.28.0",
+]
 web = [
     "httpx>=0.28.0",
     "markitdown>=0.1.0",
