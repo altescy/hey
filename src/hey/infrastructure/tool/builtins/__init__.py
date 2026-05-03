@@ -1,4 +1,4 @@
-from . import bash, edit, glob, grep, ls, read, web_fetch, web_search
+from . import bash, edit, glob, grep, ls, read, search_chat_messages, web_fetch, web_search
 
 __all__ = [
     "bash",
@@ -7,6 +7,7 @@ __all__ = [
     "grep",
     "ls",
     "read",
+    "search_chat_messages",
     "web_fetch",
     "web_search",
 ]

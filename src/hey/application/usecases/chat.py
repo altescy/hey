@@ -15,10 +15,14 @@ from hey.application.dto import (
 )
 from hey.core.workflow import WorkflowResponse
 from hey.domain.entities.agent import LLMAgentSpec
-from hey.domain.entities.chat import ChatMessage, ChatSession, ChatSessionID
+from hey.domain.entities.chat import ChatSession, ChatSessionID
 from hey.domain.entities.llm import LLMEvent, LLMState
 from hey.domain.entities.project import ProjectID
-from hey.domain.repositories.chat import IChatRepository
+from hey.domain.repositories.chat import (
+    ChatMessageRetrievalRequest,
+    ChatMessageRetrievalResponse,
+    IChatRepository,
+)
 from hey.domain.services.agent import run_llm_agent
 from hey.domain.services.chat import TIMEZONE
 from hey.domain.services.llm import make_llm_state, make_on_event_callback_for_chat, make_user_message
@@ -34,7 +38,7 @@ class AgentChatUseCase[QueryT, ResponseT]:
         self._chat_repository = chat_repository
 
     async def get_llm_state(self, input: GetLLMStateInput) -> GetLLMStateOutput:
-        chat_messages = self._chat_repository.get_messages_by_session_id(input["session_id"])
+        chat_messages = self._chat_repository.get_messages_by_session_id(input["session_id"]).results
         llm_messages = tuple(message.message for message in chat_messages)
         return GetLLMStateOutput(state=make_llm_state(llm_messages))
 
@@ -66,8 +70,19 @@ class AgentChatUseCase[QueryT, ResponseT]:
     async def get_latest_session_by_project_id(self, project_id: ProjectID) -> ChatSession | None:
         return self._chat_repository.get_latest_session_by_project_id(project_id)
 
-    async def get_messages_by_session_id(self, session_id: ChatSessionID) -> list[ChatMessage]:
-        return self._chat_repository.get_messages_by_session_id(session_id)
+    async def get_messages_by_session_id(
+        self,
+        session_id: ChatSessionID,
+        request: ChatMessageRetrievalRequest | None = None,
+    ) -> ChatMessageRetrievalResponse:
+        return self._chat_repository.get_messages_by_session_id(session_id, request)
+
+    async def get_messages_by_project_id(
+        self,
+        project_id: ProjectID,
+        request: ChatMessageRetrievalRequest | None = None,
+    ) -> ChatMessageRetrievalResponse:
+        return self._chat_repository.get_messages_by_project_id(project_id, request)
 
     @asynccontextmanager
     async def run(

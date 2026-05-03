@@ -7,7 +7,7 @@ from rich.rule import Rule
 
 from hey.application.dto import GetProjectInput
 from hey.bootstrap.container import Container
-from hey.domain.entities.chat import ChatMessage
+from hey.domain.entities.chat import ChatMessage, ChatSessionID
 from hey.domain.entities.llm import ToolResultMessage
 
 from ..display.console import render_tool_call, render_user_message_panel
@@ -31,8 +31,6 @@ async def _run_history(args: argparse.Namespace) -> None:
     project = project_usecase.get_project(GetProjectInput(path="."))["project"]
 
     if args.session is not None:
-        from hey.domain.entities.chat import ChatSessionID
-
         session = await chat_usecase.get_session_by_id(ChatSessionID(args.session))
         if session is None:
             raise SystemExit(f"Session {args.session} not found.")
@@ -41,7 +39,8 @@ async def _run_history(args: argparse.Namespace) -> None:
         if session is None:
             raise SystemExit("No chat history found.")
 
-    messages: list[ChatMessage] = await chat_usecase.get_messages_by_session_id(session.id)
+    message_response = await chat_usecase.get_messages_by_session_id(session.id)
+    messages: list[ChatMessage] = message_response.results
 
     console = Console()
     console.print(

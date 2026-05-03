@@ -1,6 +1,17 @@
 from hey.domain.entities.tool import ToolName, ToolSpec
 from hey.domain.repositories.tool import IToolRepository
-from hey.infrastructure.tool.builtins import bash, edit, glob, grep, ls, read, web_fetch, web_search
+from hey.infrastructure.tool.builtins import (
+    bash,
+    edit,
+    glob,
+    grep,
+    ls,
+    read,
+    search_chat_messages,
+    web_fetch,
+    web_search,
+)
+from hey.infrastructure.tool.builtins.dependencies import ToolDependencies
 
 # Each entry pairs an availability check with the corresponding factory.
 # Tools whose is_available() returns False are silently skipped at startup.
@@ -17,8 +28,10 @@ _BUILTIN_TOOL_ENTRIES = [
 
 
 class BuiltinToolRepository(IToolRepository):
-    def __init__(self) -> None:
+    def __init__(self, dependencies: ToolDependencies) -> None:
         tools = [create_spec() for is_available, create_spec in _BUILTIN_TOOL_ENTRIES if is_available()]
+        if search_chat_messages.is_available():
+            tools.append(search_chat_messages.create_tool_spec(dependencies))
         self._tools = {tool.name: tool for tool in tools}
 
     def get_all_specs(self) -> list[ToolSpec]:

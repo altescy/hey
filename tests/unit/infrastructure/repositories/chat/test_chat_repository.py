@@ -15,7 +15,7 @@ import pytest
 from hey.domain.entities.chat import ChatSessionID
 from hey.domain.entities.llm import UserMessage
 from hey.domain.entities.project import ProjectID
-from hey.domain.repositories.chat import IChatRepository
+from hey.domain.repositories.chat import ChatMessageRetrievalRequest, IChatRepository
 from hey.infrastructure.repositories.chat.inmemory import InMemoryChatRepository
 from hey.infrastructure.repositories.chat.sqlite import SQLiteChatRepository
 
@@ -128,7 +128,7 @@ class ChatRepositoryContractTests:
         for t in texts:
             repo.create_message(session.id, _user_message(t))
 
-        messages = repo.get_messages_by_session_id(session.id)
+        messages = repo.get_messages_by_session_id(session.id).results
         assert len(messages) == 3
         for msg, expected in zip(messages, texts):
             parts = msg.message["parts"]
@@ -136,7 +136,10 @@ class ChatRepositoryContractTests:
 
     def test_get_messages_by_session_id_returns_empty_for_unknown_session(self) -> None:
         repo = self.make_repository()
-        assert repo.get_messages_by_session_id(ChatSessionID(9999)) == []
+        response = repo.get_messages_by_session_id(ChatSessionID(9999))
+        assert response.results == []
+        assert response.total == 0
+        assert response.next_offset is None
 
     def test_messages_are_isolated_between_sessions(self) -> None:
         repo = self.make_repository()
@@ -145,8 +148,108 @@ class ChatRepositoryContractTests:
         repo.create_message(s1.id, _user_message("for s1"))
         repo.create_message(s2.id, _user_message("for s2"))
 
-        assert len(repo.get_messages_by_session_id(s1.id)) == 1
-        assert len(repo.get_messages_by_session_id(s2.id)) == 1
+        assert len(repo.get_messages_by_session_id(s1.id).results) == 1
+        assert len(repo.get_messages_by_session_id(s2.id).results) == 1
+
+    def test_get_messages_by_session_id_supports_pagination(self) -> None:
+        repo = self.make_repository()
+        session = repo.create_session(_PROJECT_A)
+        for i in range(5):
+            repo.create_message(session.id, _user_message(f"message-{i}"))
+
+        first_page = repo.get_messages_by_session_id(
+            session.id,
+            ChatMessageRetrievalRequest(offset=0, limit=2),
+        )
+        assert first_page.total == 5
+        assert first_page.next_offset == 2
+        assert [m.message["parts"][0]["text"] for m in first_page.results] == ["message-0", "message-1"]
+
+        second_page = repo.get_messages_by_session_id(
+            session.id,
+            ChatMessageRetrievalRequest(offset=first_page.next_offset or 0, limit=2),
+        )
+        assert second_page.total == 5
+        assert second_page.next_offset == 4
+        assert [m.message["parts"][0]["text"] for m in second_page.results] == ["message-2", "message-3"]
+
+        last_page = repo.get_messages_by_session_id(
+            session.id,
+            ChatMessageRetrievalRequest(offset=second_page.next_offset or 0, limit=2),
+        )
+        assert last_page.total == 5
+        assert last_page.next_offset is None
+        assert [m.message["parts"][0]["text"] for m in last_page.results] == ["message-4"]
+
+    def test_get_messages_by_session_id_supports_query_filter(self) -> None:
+        repo = self.make_repository()
+        session = repo.create_session(_PROJECT_A)
+        repo.create_message(session.id, _user_message("apple pie"))
+        repo.create_message(session.id, _user_message("banana split"))
+        repo.create_message(session.id, _user_message("green apple"))
+
+        response = repo.get_messages_by_session_id(
+            session.id,
+            ChatMessageRetrievalRequest(query="APPLE"),
+        )
+
+        assert response.total == 2
+        assert response.next_offset is None
+        assert [m.message["parts"][0]["text"] for m in response.results] == ["apple pie", "green apple"]
+
+    def test_get_messages_by_session_id_applies_query_before_pagination(self) -> None:
+        repo = self.make_repository()
+        session = repo.create_session(_PROJECT_A)
+        repo.create_message(session.id, _user_message("apple one"))
+        repo.create_message(session.id, _user_message("banana"))
+        repo.create_message(session.id, _user_message("apple two"))
+        repo.create_message(session.id, _user_message("apple three"))
+
+        response = repo.get_messages_by_session_id(
+            session.id,
+            ChatMessageRetrievalRequest(query="apple", offset=1, limit=1),
+        )
+
+        assert response.total == 3
+        assert response.next_offset == 2
+        assert [m.message["parts"][0]["text"] for m in response.results] == ["apple two"]
+
+    def test_get_messages_by_project_id_searches_across_sessions(self) -> None:
+        repo = self.make_repository()
+        s1 = repo.create_session(_PROJECT_A)
+        s2 = repo.create_session(_PROJECT_A)
+        s_other = repo.create_session(_PROJECT_B)
+        repo.create_message(s1.id, _user_message("alpha one"))
+        repo.create_message(s2.id, _user_message("beta two"))
+        repo.create_message(s_other.id, _user_message("alpha other project"))
+
+        response = repo.get_messages_by_project_id(
+            _PROJECT_A,
+            ChatMessageRetrievalRequest(query="alpha"),
+        )
+
+        assert response.total == 1
+        assert response.next_offset is None
+        assert len(response.results) == 1
+        assert response.results[0].session_id == s1.id
+        assert response.results[0].message["parts"][0]["text"] == "alpha one"
+
+    def test_get_messages_by_project_id_supports_pagination(self) -> None:
+        repo = self.make_repository()
+        s1 = repo.create_session(_PROJECT_A)
+        s2 = repo.create_session(_PROJECT_A)
+        repo.create_message(s1.id, _user_message("project-a 1"))
+        repo.create_message(s2.id, _user_message("project-a 2"))
+        repo.create_message(s1.id, _user_message("project-a 3"))
+
+        page = repo.get_messages_by_project_id(
+            _PROJECT_A,
+            ChatMessageRetrievalRequest(offset=1, limit=1),
+        )
+
+        assert page.total == 3
+        assert page.next_offset == 2
+        assert [m.message["parts"][0]["text"] for m in page.results] == ["project-a 2"]
 
     # ------------------------------------------------------------------
     # transaction (__enter__ / __exit__)
@@ -216,6 +319,6 @@ class TestSQLiteChatRepository(ChatRepositoryContractTests):
         repo1.create_message(session.id, _user_message("persisted"))
 
         repo2 = self.make_repository()
-        messages = repo2.get_messages_by_session_id(session.id)
+        messages = repo2.get_messages_by_session_id(session.id).results
         assert len(messages) == 1
         assert messages[0].message["parts"][0]["text"] == "persisted"

@@ -7,12 +7,15 @@ from pathlib import Path
 from hey.domain.entities.agent import LLMAgentSpec
 from hey.domain.entities.config import ChatConfig
 from hey.domain.entities.llm import LLMSpec
+from hey.domain.entities.project import ProjectID
 from hey.domain.entities.tool import AskPermissionFunc
 from hey.domain.repositories.chat import IChatRepository
+from hey.domain.repositories.tool import IToolRepository
 from hey.domain.services.project import get_hey_dot_directory
 from hey.infrastructure.repositories.chat import InMemoryChatRepository, SQLiteChatRepository
 from hey.infrastructure.repositories.project import LocalProjectRepository
 from hey.infrastructure.repositories.tool import BuiltinToolRepository
+from hey.infrastructure.tool.builtins.dependencies import ToolDependencies
 
 from .constants import CODEX_MODEL_PREFIX, COPILOT_MODEL_PREFIX, HEY_DB_FILENAME
 
@@ -38,6 +41,7 @@ def build_llm_spec(config: ChatConfig) -> LLMSpec:
 
 def build_agent_spec(
     config: ChatConfig,
+    tool_repository: IToolRepository,
     *,
     ask_permission: AskPermissionFunc | None = None,
 ) -> LLMAgentSpec:  # type: ignore[type-arg]
@@ -45,7 +49,7 @@ def build_agent_spec(
         llm=build_llm_spec(config),
         instructions=config.instructions,
         response_format=str,
-        tools=BuiltinToolRepository().get_all_specs(),
+        tools=tool_repository.get_all_specs(),
         permission=config.permission,
         ask_permission=ask_permission,
     )
@@ -63,3 +67,11 @@ def build_chat_repository(
     if temporary:
         return InMemoryChatRepository()
     return SQLiteChatRepository(get_hey_dot_directory(project_directory) / HEY_DB_FILENAME)
+
+
+def build_tool_dependencies(project_id: ProjectID, chat_repository: IChatRepository) -> ToolDependencies:
+    return ToolDependencies(chat_repository=chat_repository, project_id=project_id)
+
+
+def build_tool_repository(dependencies: ToolDependencies) -> IToolRepository:
+    return BuiltinToolRepository(dependencies)

@@ -8,7 +8,11 @@ from pydantic import TypeAdapter
 from hey.domain.entities.chat import ChatMessage, ChatMessageID, ChatSession, ChatSessionID
 from hey.domain.entities.llm import LLMMessage
 from hey.domain.entities.project import ProjectID
-from hey.domain.repositories.chat import IChatRepository
+from hey.domain.repositories.chat import (
+    ChatMessageRetrievalRequest,
+    ChatMessageRetrievalResponse,
+    IChatRepository,
+)
 from hey.domain.services.chat import get_chat_timestamp
 
 _LLM_MESSAGE_TA: Final[TypeAdapter[LLMMessage]] = TypeAdapter(LLMMessage)
@@ -125,12 +129,17 @@ class SQLiteChatRepository(IChatRepository):
             updated_at=row["updated_at"],
         )
 
-    def get_messages_by_session_id(self, session_id: ChatSessionID) -> list[ChatMessage]:
+    def get_messages_by_session_id(
+        self,
+        session_id: ChatSessionID,
+        request: ChatMessageRetrievalRequest | None = None,
+    ) -> ChatMessageRetrievalResponse:
+        req = request or ChatMessageRetrievalRequest()
         cursor = self._conn.execute(
             "SELECT * FROM chat_messages WHERE session_id = ? ORDER BY id ASC",
             (int(session_id),),
         )
-        return [
+        all_messages = [
             ChatMessage(
                 id=ChatMessageID(row["id"]),
                 session_id=ChatSessionID(row["session_id"]),
@@ -140,3 +149,63 @@ class SQLiteChatRepository(IChatRepository):
             )
             for row in cursor.fetchall()
         ]
+        return self._build_message_response(all_messages, req)
+
+    def get_messages_by_project_id(
+        self,
+        project_id: ProjectID,
+        request: ChatMessageRetrievalRequest | None = None,
+    ) -> ChatMessageRetrievalResponse:
+        req = request or ChatMessageRetrievalRequest()
+        cursor = self._conn.execute(
+            """
+            SELECT m.*
+            FROM chat_messages AS m
+            INNER JOIN chat_sessions AS s ON s.id = m.session_id
+            WHERE s.project_id = ?
+            ORDER BY m.created_at ASC, m.session_id ASC, m.id ASC
+            """,
+            (str(project_id),),
+        )
+        all_messages = [
+            ChatMessage(
+                id=ChatMessageID(row["id"]),
+                session_id=ChatSessionID(row["session_id"]),
+                message=_LLM_MESSAGE_TA.validate_python(json.loads(row["message"])),
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
+            )
+            for row in cursor.fetchall()
+        ]
+        return self._build_message_response(all_messages, req)
+
+    def _build_message_response(
+        self,
+        all_messages: list[ChatMessage],
+        request: ChatMessageRetrievalRequest,
+    ) -> ChatMessageRetrievalResponse:
+        offset = max(request.offset, 0)
+
+        query = (request.query or "").strip().lower()
+        if query:
+            filtered_messages = [
+                msg
+                for msg in all_messages
+                if any(part["text"].lower().find(query) >= 0 for part in msg.message.get("parts", ()))
+            ]
+        else:
+            filtered_messages = all_messages
+
+        total = len(filtered_messages)
+        if request.limit is None:
+            results = filtered_messages[offset:]
+        else:
+            limit = max(request.limit, 0)
+            results = filtered_messages[offset : offset + limit]
+
+        if request.limit is None:
+            next_offset = None
+        else:
+            next_candidate = offset + max(request.limit, 0)
+            next_offset = next_candidate if next_candidate < total else None
+        return ChatMessageRetrievalResponse(results=results, total=total, next_offset=next_offset)
