@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2.12.5",
     "pydantic-settings>=2.14.0",
     "rich>=14.3.4",
+    "httpx>=0.28.0",
 ]
 
 [project.scripts]
@@ -22,13 +23,10 @@ litellm = [
     "litellm>=1.83.4",
 ]
 copilot = [
-    "httpx>=0.28.0",
 ]
 codex = [
-    "httpx>=0.28.0",
 ]
 web = [
-    "httpx>=0.28.0",
     "markitdown>=0.1.0",
     "ddgs>=9.0.0",
 ]

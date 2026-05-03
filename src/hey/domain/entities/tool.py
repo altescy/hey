@@ -2,6 +2,8 @@ import dataclasses
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, Concatenate, Literal, NewType
 
+from hey.core.schema import JsonValue
+
 from .llm import ToolCallRecord
 
 ToolName = NewType("ToolName", str)
@@ -25,5 +27,6 @@ class ToolSpec[**ParamsT, ReturnT, ViewT]:
     permission: ToolParamPermission
     parameters_annotation: type[dict[str, Any]]
     return_annotation: type[ReturnT]
+    parameters_schema: Mapping[str, JsonValue] | None = None
     render: ToolRenderFunc[ParamsT, ReturnT, ViewT] | None = None
     ask_permission: AskPermissionFunc | None = None

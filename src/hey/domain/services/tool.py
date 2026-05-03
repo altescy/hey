@@ -51,10 +51,11 @@ def generate_tool_spec_from_callable[**ParamsT, ReturnT, ViewT](
 
 
 def generate_tool_definition_from_spec(spec: ToolSpec) -> ToolDefinition:
+    parameters = spec.parameters_schema or generate_json_schema(spec.func)
     return ToolDefinition(
         name=spec.name,
         description=spec.description,
-        parameters=generate_json_schema(spec.func),
+        parameters=parameters,
     )
 
 

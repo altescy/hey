@@ -14,7 +14,7 @@ from hey.domain.repositories.tool import IToolRepository
 from hey.domain.services.project import get_hey_dot_directory
 from hey.infrastructure.repositories.chat import InMemoryChatRepository, SQLiteChatRepository
 from hey.infrastructure.repositories.project import LocalProjectRepository
-from hey.infrastructure.repositories.tool import BuiltinToolRepository
+from hey.infrastructure.repositories.tool import BuiltinToolRepository, CompositeToolRepository, MCPToolRepository
 from hey.infrastructure.tool.builtins.dependencies import ToolDependencies
 
 from .constants import CODEX_MODEL_PREFIX, COPILOT_MODEL_PREFIX, HEY_DB_FILENAME
@@ -73,5 +73,8 @@ def build_tool_dependencies(project_id: ProjectID, chat_repository: IChatReposit
     return ToolDependencies(chat_repository=chat_repository, project_id=project_id)
 
 
-def build_tool_repository(dependencies: ToolDependencies) -> IToolRepository:
-    return BuiltinToolRepository(dependencies)
+def build_tool_repository(config: ChatConfig, dependencies: ToolDependencies) -> IToolRepository:
+    repositories: list[IToolRepository] = [BuiltinToolRepository(dependencies)]
+    if config.mcp:
+        repositories.append(MCPToolRepository(config.mcp))
+    return CompositeToolRepository(repositories)
