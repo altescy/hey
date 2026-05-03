@@ -246,15 +246,6 @@ wheels = [
 ]
 
 [[package]]
-name = "colt"
-version = "0.19.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/2d/dc/372347a03d9be5f58180e1bb1a9043e5463e2f9818e58e44aa7092e39697/colt-0.19.0.tar.gz", hash = "sha256:33521cbbe7c20d564f8e81db991e3873628817d7c3736ee5ec84b5ac40e2ae51", size = 17730, upload-time = "2026-04-15T02:46:00.742Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/9d/f1/c32a17cb938c1e98573ccc3544c4eb9c258ffa55078582f03664b39eab10/colt-0.19.0-py3-none-any.whl", hash = "sha256:27a8102eea3dde4f9facc91bafc4dcd58b138c8bf671cf8dedd471e0db5e41c3", size = 22083, upload-time = "2026-04-15T02:45:59.51Z" },
-]
-
-[[package]]
 name = "ddgs"
 version = "9.13.0"
 source = { registry = "https://pypi.org/simple" }
@@ -413,7 +404,6 @@ name = "hey"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "colt" },
     { name = "httpx" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -443,7 +433,6 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "boto3", marker = "extra == 'bedrock'" },
-    { name = "colt", specifier = ">=0.19.0" },
     { name = "ddgs", marker = "extra == 'web'", specifier = ">=9.0.0" },
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "litellm", marker = "extra == 'litellm'", specifier = ">=1.83.4" },

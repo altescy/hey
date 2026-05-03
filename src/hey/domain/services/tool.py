@@ -1,11 +1,9 @@
 import dataclasses
-import json
 import typing
 from collections.abc import Awaitable, Callable, Iterable
 from types import UnionType
 from typing import Any, Final, Union
 
-import colt
 from pydantic import TypeAdapter
 
 from hey.core.schema import generate_function_signature, generate_json_schema
@@ -87,7 +85,7 @@ def construct_tool_parameters_from_json(
     spec: ToolSpec,
     parameters_json: str,
 ) -> dict[str, Any]:
-    return colt.build(json.loads(parameters_json), spec.parameters_annotation, strict=True)
+    return TypeAdapter(spec.parameters_annotation).validate_json(parameters_json)
 
 
 def construct_tool_result_from_json[ReturnT](
@@ -112,8 +110,8 @@ def construct_tool_result_from_json[ReturnT](
         return result_json  # type: ignore[return-value]
     assert structured_schemas, "finalizer must have at least one non-str return type if it is not str"
     if len(structured_schemas) == 1:
-        return colt.build(json.loads(text), structured_schemas[0], strict=True)
-    return colt.build(json.loads(text), Union[*structured_schemas], strict=True)  # type: ignore[return-value]
+        return TypeAdapter(structured_schemas[0]).validate_json(text)
+    return TypeAdapter(Union[*structured_schemas]).validate_json(text)
 
 
 def dump_tool_result_to_json(result: Any) -> str:
