@@ -16,8 +16,8 @@ from hey.domain.entities.chat import ChatSessionID
 from hey.domain.entities.llm import UserMessage
 from hey.domain.entities.project import ProjectID
 from hey.domain.repositories.chat import IChatRepository
-from hey.infrastructure.chat.repositories.inmemory import InMemoryChatRepository
-from hey.infrastructure.chat.repositories.sqlite import SQLiteChatRepository
+from hey.infrastructure.repositories.chat.inmemory import InMemoryChatRepository
+from hey.infrastructure.repositories.chat.sqlite import SQLiteChatRepository
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -92,8 +92,8 @@ class ChatRepositoryContractTests:
 
     def test_get_latest_session_returns_most_recently_created(self) -> None:
         repo = self.make_repository()
-        _chat_svc = "hey.infrastructure.chat.repositories.inmemory.get_chat_timestamp"
-        _chat_svc_sqlite = "hey.infrastructure.chat.repositories.sqlite.get_chat_timestamp"
+        _chat_svc = "hey.infrastructure.repositories.chat.inmemory.get_chat_timestamp"
+        _chat_svc_sqlite = "hey.infrastructure.repositories.chat.sqlite.get_chat_timestamp"
 
         with patch(_chat_svc, return_value=_TS_OLD), patch(_chat_svc_sqlite, return_value=_TS_OLD):
             repo.create_session(_PROJECT_A)

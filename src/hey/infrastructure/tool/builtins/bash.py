@@ -33,7 +33,7 @@ def is_available() -> bool:
     return True
 
 
-def create_bash_tool_spec() -> ToolSpec:
+def create_tool_spec() -> ToolSpec:
     async def bash(
         command: str,
         workdir: Optional[str] = None,

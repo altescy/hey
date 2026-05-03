@@ -47,7 +47,7 @@ def is_available() -> bool:
     return True
 
 
-def create_web_fetch_tool_spec() -> ToolSpec:
+def create_tool_spec() -> ToolSpec:
     async def web_fetch(
         url: str,
         timeout: Optional[int] = None,

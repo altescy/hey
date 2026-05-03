@@ -34,7 +34,7 @@ def is_available() -> bool:
     return True
 
 
-def create_web_search_tool_spec() -> ToolSpec:
+def create_tool_spec() -> ToolSpec:
     async def web_search(
         query: str,
         max_results: Optional[int] = None,

@@ -28,7 +28,7 @@ def is_available() -> bool:
     return True
 
 
-def create_grep_tool_spec() -> ToolSpec:
+def create_tool_spec() -> ToolSpec:
     async def grep(pattern: str, path: str | None = None, include: str | None = None) -> str:
         """Search file contents with a regex, returning matching lines grouped by file."""
         root = Path(path).resolve() if path else Path.cwd()

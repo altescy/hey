@@ -50,7 +50,7 @@ def is_available() -> bool:
     return True
 
 
-def create_ls_tool_spec() -> ToolSpec:
+def create_tool_spec() -> ToolSpec:
     async def ls(path: str = ".", ignore: list[str] | None = None) -> str:
         """List files and directories under path as an indented tree."""
         root = Path(path).resolve()

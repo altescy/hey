@@ -1,16 +1,14 @@
 import argparse
+import asyncio
 
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.rule import Rule
 
 from hey.application.dto import GetProjectInput
-from hey.application.usecases.project import ProjectUseCase
+from hey.bootstrap.container import Container
 from hey.domain.entities.chat import ChatMessage
 from hey.domain.entities.llm import ToolResultMessage
-from hey.domain.services.project import get_hey_dot_directory
-from hey.infrastructure.chat import SQLiteChatRepository
-from hey.infrastructure.project import LocalProjectRepository
 
 from ..display.console import render_tool_call, render_user_message_panel
 
@@ -25,25 +23,25 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def run(args: argparse.Namespace) -> None:
-    project_use_case = ProjectUseCase(project_repository=LocalProjectRepository())
-    project = project_use_case.get_project(GetProjectInput(path="."))["project"]
+async def _run_history(args: argparse.Namespace) -> None:
+    container = Container.build()
+    project_usecase = container.project_usecase
+    chat_usecase = container.chat_usecase
 
-    db_path = get_hey_dot_directory(project.directory) / "hey.db"
-    chat_repository = SQLiteChatRepository(db_path)
+    project = project_usecase.get_project(GetProjectInput(path="."))["project"]
 
     if args.session is not None:
         from hey.domain.entities.chat import ChatSessionID
 
-        session = chat_repository.get_session_by_id(ChatSessionID(args.session))
+        session = await chat_usecase.get_session_by_id(ChatSessionID(args.session))
         if session is None:
             raise SystemExit(f"Session {args.session} not found.")
     else:
-        session = chat_repository.get_latest_session_by_project_id(project.id)
+        session = await chat_usecase.get_latest_session_by_project_id(project.id)
         if session is None:
             raise SystemExit("No chat history found.")
 
-    messages: list[ChatMessage] = chat_repository.get_messages_by_session_id(session.id)
+    messages: list[ChatMessage] = await chat_usecase.get_messages_by_session_id(session.id)
 
     console = Console()
     console.print(
@@ -101,3 +99,7 @@ def run(args: argparse.Namespace) -> None:
 
             case {"role": "system"}:
                 pass  # system メッセージは表示しない
+
+
+def run(args: argparse.Namespace) -> None:
+    asyncio.run(_run_history(args))

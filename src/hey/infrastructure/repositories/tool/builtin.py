@@ -1,19 +1,18 @@
 from hey.domain.entities.tool import ToolName, ToolSpec
 from hey.domain.repositories.tool import IToolRepository
-
-from ..builtins import bash, edit, glob, grep, ls, read, web_fetch, web_search
+from hey.infrastructure.tool.builtins import bash, edit, glob, grep, ls, read, web_fetch, web_search
 
 # Each entry pairs an availability check with the corresponding factory.
 # Tools whose is_available() returns False are silently skipped at startup.
 _BUILTIN_TOOL_ENTRIES = [
-    (bash.is_available, bash.create_bash_tool_spec),
-    (edit.is_available, edit.create_edit_tool_spec),
-    (glob.is_available, glob.create_glob_tool_spec),
-    (grep.is_available, grep.create_grep_tool_spec),
-    (ls.is_available, ls.create_ls_tool_spec),
-    (read.is_available, read.create_read_tool_spec),
-    (web_fetch.is_available, web_fetch.create_web_fetch_tool_spec),
-    (web_search.is_available, web_search.create_web_search_tool_spec),
+    (bash.is_available, bash.create_tool_spec),
+    (edit.is_available, edit.create_tool_spec),
+    (glob.is_available, glob.create_tool_spec),
+    (grep.is_available, grep.create_tool_spec),
+    (ls.is_available, ls.create_tool_spec),
+    (read.is_available, read.create_tool_spec),
+    (web_fetch.is_available, web_fetch.create_tool_spec),
+    (web_search.is_available, web_search.create_tool_spec),
 ]
 
 

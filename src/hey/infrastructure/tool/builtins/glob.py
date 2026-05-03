@@ -27,7 +27,7 @@ def is_available() -> bool:
     return True
 
 
-def create_glob_tool_spec() -> ToolSpec:
+def create_tool_spec() -> ToolSpec:
     async def glob(pattern: str, path: str | None = None) -> str:
         """Find files matching a glob pattern, sorted by modification time."""
         root = Path(path).resolve() if path else Path.cwd()

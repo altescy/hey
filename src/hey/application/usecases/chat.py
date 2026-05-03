@@ -15,7 +15,9 @@ from hey.application.dto import (
 )
 from hey.core.workflow import WorkflowResponse
 from hey.domain.entities.agent import LLMAgentSpec
+from hey.domain.entities.chat import ChatMessage, ChatSession, ChatSessionID
 from hey.domain.entities.llm import LLMEvent, LLMState
+from hey.domain.entities.project import ProjectID
 from hey.domain.repositories.chat import IChatRepository
 from hey.domain.services.agent import run_llm_agent
 from hey.domain.services.chat import TIMEZONE
@@ -58,12 +60,20 @@ class AgentChatUseCase[QueryT, ResponseT]:
             raise ValueError(f"Chat session with ID {input['session_id']} not found")
         return ResumeSessionOutput(session=session)
 
+    async def get_session_by_id(self, session_id: ChatSessionID) -> ChatSession | None:
+        return self._chat_repository.get_session_by_id(session_id)
+
+    async def get_latest_session_by_project_id(self, project_id: ProjectID) -> ChatSession | None:
+        return self._chat_repository.get_latest_session_by_project_id(project_id)
+
+    async def get_messages_by_session_id(self, session_id: ChatSessionID) -> list[ChatMessage]:
+        return self._chat_repository.get_messages_by_session_id(session_id)
+
     @asynccontextmanager
     async def run(
         self,
         input: RunChatInput,
     ) -> AsyncIterator[WorkflowResponse[LLMEvent, LLMState, ResponseT]]:
-
         state = (await self.get_llm_state(GetLLMStateInput(session_id=input["session_id"])))["state"]
         self._chat_repository.create_message(session_id=input["session_id"], message=make_user_message(input["prompt"]))
         yield run_llm_agent(
