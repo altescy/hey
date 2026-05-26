@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from hey.core.agent.runtime import make_agent_runtime, run_agent_loop
+from hey.core.agent.runtime import InterpretInterrupted, make_agent_runtime, run_agent_loop
 
 # ---------------------------------------------------------------------------
 # Helpers for make_agent_runtime
@@ -266,3 +266,40 @@ class TestRunAgentLoop:
         )
         with pytest.raises(RuntimeError, match="boom"):
             await response.collect()
+
+    @pytest.mark.asyncio
+    async def test_tool_interruption_events_published_before_reraise(self) -> None:
+        state = _LoopState()
+
+        async def _runtime(s: _LoopState) -> AsyncIterator[str]:
+            yield "trigger"
+
+        def _update_with_cmd(events: Sequence[str], s: _LoopState) -> tuple[_LoopState, Sequence[str]]:
+            if events == ["trigger"]:
+                return dataclasses.replace(s, count=1), ["cmd1"]
+            return dataclasses.replace(s, done=True), []
+
+        interrupted_event = "tool_result_interrupted"
+
+        async def _interrupting_interpret(cmds: Sequence[str], s: _LoopState) -> Sequence[str]:
+            raise InterpretInterrupted(events=(interrupted_event,), cause=EOFError())
+
+        seen: list[str] = []
+
+        async def _on_event(event: str) -> None:
+            seen.append(event)
+
+        response = run_agent_loop(
+            state,
+            runtime=_runtime,
+            update=_update_with_cmd,
+            interpret=_interrupting_interpret,
+            is_done=lambda s: s.done,
+            finish=lambda s: s.count,
+            on_event=_on_event,
+        )
+
+        with pytest.raises(EOFError):
+            _ = [e async for e in response.events()]
+
+        assert interrupted_event in seen

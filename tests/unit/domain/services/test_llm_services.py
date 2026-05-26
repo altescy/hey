@@ -1,5 +1,6 @@
 """Tests for hey.domain.services.llm."""
 
+import asyncio
 import json
 from typing import Literal
 
@@ -18,6 +19,7 @@ from hey.domain.entities.llm import (
     UserMessage,
 )
 from hey.domain.entities.tool import ToolName, ToolSpec
+from hey.domain.exceptions.tool import ToolExecutionInterrupted
 from hey.domain.services.llm import (
     append_user_message,
     finalize_llm,
@@ -345,3 +347,26 @@ class TestLLMAgentInterpreter:
         results = await interpret_llm_cmds(cmds, LLMState(), tools=tools)
         assert len(results) == 3
         assert all(r.status == "success" for r in results)
+
+    @pytest.mark.asyncio
+    async def test_eof_error_raises_with_fallback_tool_results(self) -> None:
+        async def _interrupt(delay: float) -> str:
+            if delay > 0:
+                await asyncio.sleep(delay)
+                return "done"
+            raise EOFError()
+
+        tools = (_make_tool_spec("interrupt", _interrupt),)
+        cmds = [
+            RunToolCall(record=_tool_call("interrupt", '{"delay": 0.1}', call_id="c1"), tool=_tool_def("interrupt")),
+            RunToolCall(record=_tool_call("interrupt", '{"delay": 0}', call_id="c2"), tool=_tool_def("interrupt")),
+        ]
+
+        with pytest.raises(ToolExecutionInterrupted) as excinfo:
+            await interpret_llm_cmds(cmds, LLMState(), tools=tools)
+
+        exc = excinfo.value
+        assert isinstance(exc.cause, EOFError)
+        assert len(exc.events) == 2
+        assert [event.message["tool_call_id"] for event in exc.events] == ["c1", "c2"]
+        assert all(event.status == "error" for event in exc.events)

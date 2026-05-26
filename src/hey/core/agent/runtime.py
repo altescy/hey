@@ -1,9 +1,24 @@
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+from typing import Any
 
 from hey.core.workflow.response import WorkflowResponse
 from hey.core.workflow.source import EventSource
 
 from .protocols import Contextualizer, Engine, Reducer
+
+
+class InterpretInterrupted(Exception):
+    """`interpret` was interrupted after partial events were prepared.
+
+    The agent loop publishes ``events`` to subscribers before re-raising
+    ``cause``, so downstream consumers see a coherent event stream even when
+    interpretation is cut short.
+    """
+
+    def __init__(self, *, events: tuple[Any, ...], cause: BaseException) -> None:
+        self.events = events
+        self.cause = cause
+        super().__init__(str(cause))
 
 
 def make_agent_runtime[StateT, QueryT, EventT, SignalT, BufferT](
@@ -47,7 +62,14 @@ def run_agent_loop[StateT, EventT, CmdT, ResultT](
                     turn_events.append(event)
                 current_state, cmds = update(turn_events, current_state)
                 while cmds:
-                    results = await interpret(cmds, current_state)
+                    try:
+                        results = await interpret(cmds, current_state)
+                    except InterpretInterrupted as exc:
+                        for evt in exc.events:
+                            await source.publish(evt)
+                            if on_event is not None:
+                                await on_event(evt)
+                        raise exc.cause from None
                     for evt in results:
                         await source.publish(evt)
                         if on_event is not None:

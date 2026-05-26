@@ -30,7 +30,7 @@ from hey.domain.entities.llm import (
     UserMessage,
 )
 from hey.domain.entities.tool import ToolName, ToolSpec
-from hey.domain.exceptions.tool import ToolCallDenied
+from hey.domain.exceptions.tool import ToolCallDenied, ToolExecutionInterrupted
 from hey.domain.repositories.chat import IChatRepository
 from hey.domain.services.tool import (
     construct_tool_parameters_from_json,
@@ -237,8 +237,44 @@ async def interpret_llm_cmds(
     token = _LLM_STATE.set(state)
 
     try:
-        async with asyncio.TaskGroup() as group:
-            tasks = [group.create_task(_execute(cmd)) for cmd in cmds]
+        tasks: list[asyncio.Task[EmitToolResult]] = []
+        try:
+            async with asyncio.TaskGroup() as group:
+                tasks = [group.create_task(_execute(cmd)) for cmd in cmds]
+        except* (KeyboardInterrupt, EOFError) as eg:
+            cause = eg.exceptions[0]
+            completed_by_id: dict[str, EmitToolResult] = {}
+            for task in tasks:
+                if not task.done() or task.cancelled():
+                    continue
+                with suppress(BaseException):
+                    result = task.result()
+                    completed_by_id[result.message["tool_call_id"]] = result
+
+            interrupted_events: list[EmitToolResult] = []
+            for cmd in cmds:
+                existing = completed_by_id.get(cmd.record["id"])
+                if existing is not None:
+                    interrupted_events.append(existing)
+                    continue
+
+                interrupted_events.append(
+                    EmitToolResult(
+                        message=ToolResultMessage(
+                            role="tool_result",
+                            tool_call_id=cmd.record["id"],
+                            parts=(
+                                TextContent(
+                                    type="text",
+                                    text=f"Error: tool execution interrupted: {type(cause).__name__}",
+                                ),
+                            ),
+                        ),
+                        status="error",
+                    )
+                )
+
+            raise ToolExecutionInterrupted(events=tuple(interrupted_events), cause=cause) from cause
     finally:
         _LLM_STATE.reset(token)
 
