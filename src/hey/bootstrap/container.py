@@ -38,7 +38,12 @@ class Container:
         chat_repository = build_chat_repository(project.directory, temporary=temporary)
         tool_dependencies = build_tool_dependencies(project.id, chat_repository)
         tool_repository = build_tool_repository(project.config.chat, tool_dependencies)
-        agent_spec = build_agent_spec(project.config.chat, tool_repository, ask_permission=ask_permission)
+        agent_spec = build_agent_spec(
+            project.config.chat,
+            tool_repository,
+            project_directory=project.directory,
+            ask_permission=ask_permission,
+        )
         chat_usecase = AgentChatUseCase(agent=agent_spec, chat_repository=chat_repository)
 
         return cls(

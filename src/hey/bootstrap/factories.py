@@ -11,6 +11,7 @@ from hey.domain.entities.project import ProjectID
 from hey.domain.entities.tool import AskPermissionFunc
 from hey.domain.repositories.chat import IChatRepository
 from hey.domain.repositories.tool import IToolRepository
+from hey.domain.services.agentsmd import build_agents_instructions
 from hey.domain.services.project import get_hey_dot_directory
 from hey.infrastructure.repositories.chat import InMemoryChatRepository, SQLiteChatRepository
 from hey.infrastructure.repositories.project import LocalProjectRepository
@@ -26,9 +27,18 @@ from .constants import (
 )
 
 
-def build_llm_spec(config: ChatConfig) -> LLMSpec:
+def _merge_instructions(config_instructions: str, agentsmd_instructions: str | None) -> str:
+    if not agentsmd_instructions:
+        return config_instructions
+    if not config_instructions.strip():
+        return agentsmd_instructions
+    return f"{agentsmd_instructions}\n\n{config_instructions}"
+
+
+def build_llm_spec(config: ChatConfig, *, project_directory: Path | None = None) -> LLMSpec:
     model = config.model
-    instructions = config.instructions
+    agentsmd = build_agents_instructions(project_directory) if project_directory else None
+    instructions = _merge_instructions(config.instructions, agentsmd)
 
     if model.startswith(COPILOT_MODEL_PREFIX):
         from hey.infrastructure.llm.copilot import get_copilot_spec
@@ -67,10 +77,11 @@ def build_agent_spec(
     config: ChatConfig,
     tool_repository: IToolRepository,
     *,
+    project_directory: Path | None = None,
     ask_permission: AskPermissionFunc | None = None,
 ) -> LLMAgentSpec:  # type: ignore[type-arg]
     return LLMAgentSpec(
-        llm=build_llm_spec(config),
+        llm=build_llm_spec(config, project_directory=project_directory),
         instructions=config.instructions,
         response_format=str,
         tools=tool_repository.get_all_specs(),
