@@ -1,0 +1,85 @@
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+from typing import Any
+
+from hey.core.workflow.response import WorkflowResponse
+from hey.core.workflow.source import EventSource
+
+from .protocols import Contextualizer, Engine, Reducer
+
+
+class InterpretInterrupted(Exception):
+    """`interpret` was interrupted after partial events were prepared.
+
+    The agent loop publishes ``events`` to subscribers before re-raising
+    ``cause``, so downstream consumers see a coherent event stream even when
+    interpretation is cut short.
+    """
+
+    def __init__(self, *, events: tuple[Any, ...], cause: BaseException) -> None:
+        self.events = events
+        self.cause = cause
+        super().__init__(str(cause))
+
+
+def make_agent_runtime[StateT, QueryT, EventT, SignalT, BufferT](
+    engine: Engine[QueryT, SignalT],
+    reducer: Reducer[BufferT, SignalT, EventT],
+    contextualizer: Contextualizer[QueryT, StateT],
+) -> Callable[[StateT], AsyncIterator[EventT]]:
+    async def _run(state: StateT) -> AsyncIterator[EventT]:
+        buffer: BufferT | None = None
+        query = contextualizer(state)
+        async with engine(query) as stream:
+            async for signal in stream:
+                events, buffer = reducer(signal, buffer)
+                for event in events:
+                    yield event
+
+    return _run
+
+
+def run_agent_loop[StateT, EventT, CmdT, ResultT](
+    state: StateT,
+    *,
+    runtime: Callable[[StateT], AsyncIterator[EventT]],
+    update: Callable[[Sequence[EventT], StateT], tuple[StateT, Sequence[CmdT]]],
+    interpret: Callable[[Sequence[CmdT], StateT], Awaitable[Sequence[EventT]]],
+    is_done: Callable[[StateT], bool],
+    finish: Callable[[StateT], ResultT],
+    on_event: Callable[[EventT], Awaitable[None]] | None = None,
+) -> WorkflowResponse[EventT, StateT, ResultT]:
+    source = EventSource[EventT]()
+
+    async def _ro() -> tuple[StateT, ResultT]:
+        current_state = state
+        try:
+            while not is_done(current_state):
+                turn_events: list[EventT] = []
+                async for event in runtime(current_state):
+                    await source.publish(event)
+                    if on_event is not None:
+                        await on_event(event)
+                    turn_events.append(event)
+                current_state, cmds = update(turn_events, current_state)
+                while cmds:
+                    try:
+                        results = await interpret(cmds, current_state)
+                    except InterpretInterrupted as exc:
+                        for evt in exc.events:
+                            await source.publish(evt)
+                            if on_event is not None:
+                                await on_event(evt)
+                        raise exc.cause from None
+                    for evt in results:
+                        await source.publish(evt)
+                        if on_event is not None:
+                            await on_event(evt)
+                    current_state, cmds = update(list(results), current_state)
+            result = finish(current_state)
+            await source.aclose()
+            return current_state, result
+        except BaseException as exc:
+            await source.aclose(exception=exc)
+            raise
+
+    return WorkflowResponse(source, _ro)
