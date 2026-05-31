@@ -441,7 +441,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.14.0" },
     { name = "rich", specifier = ">=14.3.4" },
 ]
-provides-extras = ["litellm", "copilot", "codex", "web", "bedrock"]
+provides-extras = ["litellm", "copilot", "codex", "opencode", "web", "bedrock"]
 
 [package.metadata.requires-dev]
 dev = [

@@ -17,7 +17,13 @@ from hey.infrastructure.repositories.project import LocalProjectRepository
 from hey.infrastructure.repositories.tool import BuiltinToolRepository, CompositeToolRepository, MCPToolRepository
 from hey.infrastructure.tool.builtins.dependencies import ToolDependencies
 
-from .constants import CODEX_MODEL_PREFIX, COPILOT_MODEL_PREFIX, HEY_DB_FILENAME
+from .constants import (
+    CODEX_MODEL_PREFIX,
+    COPILOT_MODEL_PREFIX,
+    HEY_DB_FILENAME,
+    OPENCODE_GO_MODEL_PREFIX,
+    OPENCODE_MODEL_PREFIX,
+)
 
 
 def build_llm_spec(config: ChatConfig) -> LLMSpec:
@@ -32,7 +38,25 @@ def build_llm_spec(config: ChatConfig) -> LLMSpec:
     if model.startswith(CODEX_MODEL_PREFIX):
         from hey.infrastructure.llm.codex import get_codex_spec
 
-        return get_codex_spec(model=model[len(COPILOT_MODEL_PREFIX) :], instructions=instructions)
+        return get_codex_spec(model=model[len(CODEX_MODEL_PREFIX) :], instructions=instructions)
+
+    if model.startswith(OPENCODE_GO_MODEL_PREFIX):
+        from hey.infrastructure.llm.opencode import get_opencode_spec
+
+        return get_opencode_spec(
+            model=model[len(OPENCODE_GO_MODEL_PREFIX) :],
+            base_url="https://opencode.ai/zen/go/v1/chat/completions",
+            instructions=instructions,
+        )
+
+    if model.startswith(OPENCODE_MODEL_PREFIX):
+        from hey.infrastructure.llm.opencode import get_opencode_spec
+
+        return get_opencode_spec(
+            model=model[len(OPENCODE_MODEL_PREFIX) :],
+            base_url="https://opencode.ai/zen/v1/chat/completions",
+            instructions=instructions,
+        )
 
     from hey.infrastructure.llm.litellm import get_litellm_spec
 
