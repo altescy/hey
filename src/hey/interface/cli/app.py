@@ -1,4 +1,5 @@
 import argparse
+import warnings
 
 from hey.version import VERSION
 
@@ -6,6 +7,8 @@ from .commands import chat, history
 
 
 def main(prog: str | None = None) -> None:
+    warnings.filterwarnings("ignore")
+
     parser = argparse.ArgumentParser(prog=prog, description="Hey is a CLI chat agent.")
     parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
     parser.add_argument("prompt", nargs="*", help="The prompt to send to the LLM.")

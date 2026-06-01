@@ -127,7 +127,6 @@ class ChatDisplay:
 
         record = self._tool_calls.pop(result["tool_call_id"], None)
         if record is not None:
-            self._console.print()
             self._console.print(f"{tool_call_status_icon(status)} {render_tool_call(record)}")
             if markdown:
                 self._console.print()
@@ -137,6 +136,7 @@ class ChatDisplay:
                 self._console.print(
                     f"  [dim]╰─ {render_llm_message(result, width=get_console_width(self._console) - 6)}[/dim]"
                 )
+                self._console.print()
 
     def done(self) -> None:
         self._stop_live()
@@ -160,7 +160,7 @@ async def ask_permission(
                 console.input,
                 f"{writer.prefix}Allow this tool call? (y/n) ",
             )
-            # console.print()
+            console.print()
             match answer.lower():
                 case "y":
                     return "allow"

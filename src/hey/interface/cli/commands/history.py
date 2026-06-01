@@ -81,7 +81,12 @@ async def _run_history(args: argparse.Namespace) -> None:
                 # Advance the outer cursor past all consumed tool_result messages.
                 i = j
 
-                for record in tool_calls:
+                if tool_calls:
+                    console.print()
+
+                for idx, record in enumerate(tool_calls):
+                    if idx > 0:
+                        console.print()
                     console.print(f"  {render_tool_call(record)}")
                     result = results_by_id.get(record["id"])
                     if result is not None:

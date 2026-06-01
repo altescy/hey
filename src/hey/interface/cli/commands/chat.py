@@ -84,6 +84,8 @@ async def _run_chat(prompt: str, temporary: bool, new_session: bool) -> None:
                 case EmitLLMMessage(message=message):
                     display.commit_message(message)
                     if message["role"] == "assistant":
+                        if message["tool_calls"]:
+                            console.print()
                         for record in message["tool_calls"]:
                             display.add_pending_tool_call(record)
                 case EmitToolResult(message=message, status=status, view=markdown):
@@ -91,5 +93,6 @@ async def _run_chat(prompt: str, temporary: bool, new_session: bool) -> None:
                     if not display.has_pending_tool_calls:
                         display.show_waiting()
     display.done()
+    console.print()
 
     await response.collect()
