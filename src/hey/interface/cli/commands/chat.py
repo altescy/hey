@@ -14,6 +14,7 @@ from hey.application.dto import (
     RunChatInput,
 )
 from hey.bootstrap.container import Container
+from hey.core.workflow.events import WorkflowNodeFinishedEvent, WorkflowNodeStartedEvent
 from hey.domain.entities.llm import EmitLLMMessage, EmitLLMSignal, EmitToolResult
 
 from ..display.chat import ChatDisplay, ask_permission
@@ -112,6 +113,10 @@ async def _run_chat(prompt: str, temporary: bool, new_session: bool, compact: bo
                     display.finish_tool_call(message, status, markdown)
                     if not display.has_pending_tool_calls:
                         display.show_waiting()
+                case WorkflowNodeStartedEvent(node_name="maybe_compact"):
+                    display.show_compacting()
+                case WorkflowNodeFinishedEvent(node_name="maybe_compact"):
+                    display.hide_compacting()
     display.done()
     console.print()
 

@@ -25,6 +25,7 @@ from hey.domain.services.llm import (
     finalize_llm,
     interpret_llm_cmds,
     is_llm_state_done,
+    make_on_event_callback_for_chat,
     reduce_llm_signal,
     truncate,
     update_llm_state,
@@ -206,6 +207,26 @@ class TestLLMAgentUpdater:
         assert new_state.history[0]["role"] == "assistant"
         assert cmds == []
 
+    def test_turn_done_signal_updates_last_usage(self) -> None:
+        state = LLMState()
+        from hey.domain.entities.llm import EmitLLMSignal
+
+        events = [
+            EmitLLMSignal(
+                {
+                    "type": "turn_done",
+                    "reason": "stop",
+                    "usage": {"input_tokens": 12, "output_tokens": 3},
+                }
+            )
+        ]
+        new_state, cmds = update_llm_state(events, state)
+
+        assert new_state.last_usage is not None
+        assert new_state.last_usage.input_tokens == 12
+        assert new_state.last_usage.output_tokens == 3
+        assert cmds == []
+
     def test_tool_call_produces_run_command(self) -> None:
         tool = _tool_def("my_tool")
         state = LLMState(tools=(tool,))
@@ -370,3 +391,19 @@ class TestLLMAgentInterpreter:
         assert len(exc.events) == 2
         assert [event.message["tool_call_id"] for event in exc.events] == ["c1", "c2"]
         assert all(event.status == "error" for event in exc.events)
+
+
+class TestMakeOnEventCallbackForChat:
+    async def test_persists_assistant_message_without_metadata(self) -> None:
+        from hey.domain.entities.chat import ChatSessionID
+
+        captured: list[dict] = []
+
+        class _Repo:
+            def create_message(self, session_id, message, *, kind="normal", metadata=None):  # type: ignore[no-untyped-def]
+                captured.append({"session_id": session_id, "kind": kind, "metadata": metadata})
+
+        callback = make_on_event_callback_for_chat(ChatSessionID(1), _Repo())  # type: ignore[arg-type]
+        await callback(EmitLLMMessage(message=_user("hi")))
+
+        assert captured == [{"session_id": ChatSessionID(1), "kind": "normal", "metadata": None}]

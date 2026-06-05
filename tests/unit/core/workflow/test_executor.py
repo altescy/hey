@@ -82,3 +82,32 @@ async def test_executor_collects_stop_result_without_mutating_remaining_during_i
     assert final_state.executed == ("started",)
     assert result == ("done",)
     assert any(isinstance(event, WorkflowFinishedEvent) for event in events)
+
+
+@pytest.mark.asyncio
+async def test_executor_runs_terminal_after_skipped_conditional_dependency() -> None:
+    def never(_: _State) -> bool:
+        return False
+
+    async def no_events(_: _State) -> AsyncIterator[Control[str, tuple[str, ...]]]:
+        if False:
+            yield Continue("skipped")
+
+    async def finish(_: _State) -> AsyncIterator[Control[str, tuple[str, ...]]]:
+        yield Stop(("done",))
+
+    graph = (
+        WorkflowGraph[_State, str, tuple[str, ...]]()
+        .add("a", _node_event("a"))
+        .add("maybe", no_events, deps=("a",), cond=never)
+        .add("finish", finish, deps=("maybe",))
+    )
+    executor = WorkflowExecutor[_State, str, tuple[str, ...]](_Handler())
+    response = await executor(graph, _State())
+
+    events = [event async for event in response.events()]
+    final_state, result = await response.collect()
+
+    assert final_state.executed == ("a",)
+    assert result == ("done",)
+    assert any(isinstance(event, WorkflowFinishedEvent) for event in events)

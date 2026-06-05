@@ -1,9 +1,22 @@
 import datetime
 
-from hey.application.usecases.chat import _compacted_llm_messages, _select_compaction_messages
+from hey.application.usecases.chat import (
+    _compacted_llm_messages,
+    _make_compaction_prompt,
+    _select_compaction_messages,
+    _should_auto_compact,
+)
 from hey.domain.entities.chat import ChatMessage, ChatMessageID, ChatSessionID
 from hey.domain.entities.config import ChatCompactionConfig
-from hey.domain.entities.llm import AssistantMessage, SystemMessage, TextContent, UserMessage
+from hey.domain.entities.llm import (
+    AssistantMessage,
+    LLMModelMetadata,
+    LLMState,
+    LLMUsageStats,
+    SystemMessage,
+    TextContent,
+    UserMessage,
+)
 
 _TS = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
 _SESSION_ID = ChatSessionID(1)
@@ -90,3 +103,80 @@ def test_select_compaction_messages_uses_previous_summary_as_anchor() -> None:
     assert selection.previous_summary == "previous summary"
     assert [int(message.id) for message in selection.head] == [3, 4]
     assert selection.tail_start_message_id == 5
+
+
+def test_should_auto_compact_requires_auto_and_context_limit() -> None:
+    state = _state_with_messages((_user(1, "x" * 1000).message,))
+
+    assert not _should_auto_compact(
+        state,
+        ChatCompactionConfig(auto=False, max_context_tokens=1000, reserve_output_tokens=0),
+        LLMModelMetadata(),
+    )
+    assert not _should_auto_compact(
+        state,
+        ChatCompactionConfig(auto=True, max_context_tokens=None, reserve_output_tokens=0),
+        LLMModelMetadata(),
+    )
+
+
+def test_should_auto_compact_uses_usage_tokens_when_available() -> None:
+    state = _state_with_messages(
+        (_user(1, "short").message,),
+        last_usage=LLMUsageStats(input_tokens=800),
+    )
+    config = ChatCompactionConfig(auto=True, max_context_tokens=1000, reserve_output_tokens=0, threshold_ratio=0.8)
+
+    assert _should_auto_compact(state, config, LLMModelMetadata())
+    assert not _should_auto_compact(
+        _state_with_messages((_user(1, "short").message,), last_usage=LLMUsageStats(input_tokens=799)),
+        config,
+        LLMModelMetadata(),
+    )
+
+
+def test_should_auto_compact_can_use_model_context_limit() -> None:
+    state = _state_with_messages((_user(1, "x" * 4000).message,))
+    config = ChatCompactionConfig(auto=True, max_context_tokens=None, reserve_output_tokens=0, threshold_ratio=0.8)
+
+    assert _should_auto_compact(state, config, LLMModelMetadata(context_limit=1000))
+
+
+def test_make_compaction_prompt_does_not_inline_transcript() -> None:
+    selection = _select_compaction_messages(
+        (
+            _user(1, "old user MARK_HEAD"),
+            _assistant(2, "old assistant MARK_HEAD"),
+            _user(3, "tail user"),
+            _assistant(4, "tail assistant"),
+        ),
+        ChatCompactionConfig(tail_turns=1),
+    )
+    assert selection is not None
+
+    prompt = _make_compaction_prompt(selection)
+
+    assert "MARK_HEAD" not in prompt
+
+
+def test_make_compaction_prompt_includes_previous_summary() -> None:
+    selection = _select_compaction_messages(
+        (
+            _user(1, "x"),
+            _summary(2, "PREVIOUS SUMMARY TEXT", tail_start_message_id=3),
+            _user(3, "y"),
+            _assistant(4, "z"),
+            _user(5, "y2"),
+            _assistant(6, "z2"),
+        ),
+        ChatCompactionConfig(tail_turns=1),
+    )
+    assert selection is not None
+
+    prompt = _make_compaction_prompt(selection)
+
+    assert "PREVIOUS SUMMARY TEXT" in prompt
+
+
+def _state_with_messages(messages, last_usage: LLMUsageStats | None = None):
+    return LLMState(history=tuple(messages), last_usage=last_usage)

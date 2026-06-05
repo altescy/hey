@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import asyncio
 import dataclasses
 import datetime
-from collections.abc import AsyncIterator, Iterable, Sequence
+import logging
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Sequence
 from contextlib import asynccontextmanager, suppress
 from typing import Any
 
@@ -28,12 +31,17 @@ from hey.core.workflow import (
     WorkflowProgressEvent,
     WorkflowResponse,
 )
-from hey.core.workflow.events import BaseWorkflowProgressEvent
+from hey.core.workflow.events import (
+    WorkflowFinishedEvent,
+    WorkflowNodeFinishedEvent,
+    WorkflowNodeStartedEvent,
+    WorkflowStartedEvent,
+)
 from hey.core.workflow.source import EventSource
 from hey.domain.entities.agent import LLMAgentSpec
 from hey.domain.entities.chat import ChatMessage, ChatSession, ChatSessionID
 from hey.domain.entities.config import ChatCompactionConfig
-from hey.domain.entities.llm import LLMEvent, LLMMessage, LLMState, SystemMessage, TextContent
+from hey.domain.entities.llm import LLMEvent, LLMMessage, LLMModelMetadata, LLMState, SystemMessage, TextContent
 from hey.domain.entities.project import ProjectID
 from hey.domain.repositories.chat import (
     ChatMessageRetrievalRequest,
@@ -43,6 +51,8 @@ from hey.domain.repositories.chat import (
 from hey.domain.services.agent import run_llm_agent
 from hey.domain.services.chat import TIMEZONE
 from hey.domain.services.llm import make_llm_state, make_on_event_callback_for_chat, make_user_message, update_llm_state
+
+logger = logging.getLogger(__name__)
 
 _SUMMARY_PROMPT = """Create an updated compact handoff summary for continuing this conversation.
 
@@ -143,10 +153,13 @@ class AgentChatUseCase[QueryT, ResponseT]:
         return self._chat_repository.get_messages_by_project_id(project_id, request)
 
     async def compact(self, input: CompactChatInput) -> CompactChatOutput:
+        return await self._compact_session(input["session_id"])
+
+    async def _compact_session(self, session_id: ChatSessionID) -> CompactChatOutput:
         if not self._compaction_config.enabled:
             return CompactChatOutput(compacted=False, summary=None)
 
-        chat_messages = self._chat_repository.get_messages_by_session_id(input["session_id"]).results
+        chat_messages = self._chat_repository.get_messages_by_session_id(session_id).results
         selection = _select_compaction_messages(chat_messages, self._compaction_config)
         if selection is None:
             return CompactChatOutput(compacted=False, summary=None)
@@ -163,7 +176,7 @@ class AgentChatUseCase[QueryT, ResponseT]:
             return CompactChatOutput(compacted=False, summary=None)
 
         self._chat_repository.create_message(
-            session_id=input["session_id"],
+            session_id=session_id,
             message=_make_summary_message(summary),
             kind="summary",
             metadata={"tail_start_message_id": selection.tail_start_message_id},
@@ -174,14 +187,22 @@ class AgentChatUseCase[QueryT, ResponseT]:
     async def run(
         self,
         input: RunChatInput,
-    ) -> AsyncIterator[WorkflowResponse[LLMEvent, LLMState, ResponseT]]:
+    ) -> AsyncIterator[
+        WorkflowResponse[LLMEvent | WorkflowNodeStartedEvent | WorkflowNodeFinishedEvent, LLMState, ResponseT]
+    ]:
         state = (await self.get_llm_state(GetLLMStateInput(session_id=input["session_id"])))["state"]
         self._chat_repository.create_message(session_id=input["session_id"], message=make_user_message(input["prompt"]))
+        runtime = _ChatWorkflowRuntime()
         graph = _make_agent_chat_workflow(
             agent=self._agent,
             prompt=input["prompt"],
             session_id=input["session_id"],
             chat_repository=self._chat_repository,
+            runtime=runtime,
+            should_auto_compact=lambda state: _should_auto_compact(
+                state, self._compaction_config, self._agent.llm.model
+            ),
+            compact=lambda: self._compact_session(input["session_id"]),
         )
         response = await WorkflowExecutor(handler=_ChatWorkflowHandler[ResponseT]())(
             graph,
@@ -195,6 +216,9 @@ def _make_agent_chat_workflow[QueryT, ResponseT](
     prompt: str,
     session_id: ChatSessionID,
     chat_repository: IChatRepository,
+    runtime: _ChatWorkflowRuntime,
+    should_auto_compact: Callable[[LLMState], bool] | None = None,
+    compact: Callable[[], Awaitable[CompactChatOutput]] | None = None,
 ) -> WorkflowGraph[LLMState, LLMEvent, ResponseT]:
     async def run_agent(state: LLMState) -> AsyncIterator[Control[LLMEvent, ResponseT]]:
         response = run_llm_agent(
@@ -207,21 +231,47 @@ def _make_agent_chat_workflow[QueryT, ResponseT](
             yield Continue(event)
 
         _, result = await response.collect()
-        yield Stop(result)
+        runtime.result = result
+        if should_auto_compact is None:
+            yield Stop(result)
 
-    return WorkflowGraph[LLMState, LLMEvent, ResponseT]().add("agent", run_agent)
+    if should_auto_compact is None or compact is None:
+        return WorkflowGraph[LLMState, LLMEvent, ResponseT]().add("agent", run_agent)
+
+    async def maybe_compact(state: LLMState) -> AsyncIterator[Control[LLMEvent, ResponseT]]:
+        try:
+            await compact()
+        except Exception:
+            logger.exception("auto-compaction failed; continuing without a new summary")
+        if False:  # async-generator marker: this node never yields a control
+            yield Stop(runtime.result)
+
+    async def finish_agent(_: LLMState) -> AsyncIterator[Control[LLMEvent, ResponseT]]:
+        yield Stop(runtime.result)
+
+    return (
+        WorkflowGraph[LLMState, LLMEvent, ResponseT]()
+        .add("agent", run_agent)
+        .add(
+            "maybe_compact",
+            maybe_compact,
+            deps=("agent",),
+            cond=should_auto_compact,
+        )
+        .add("finish", finish_agent, deps=("maybe_compact",))
+    )
 
 
 def _filter_chat_workflow_events[ResponseT](
     response: WorkflowResponse[LLMEvent | WorkflowProgressEvent, LLMState, ResponseT],
-) -> WorkflowResponse[LLMEvent, LLMState, ResponseT]:
-    source = EventSource[LLMEvent]()
+) -> WorkflowResponse[LLMEvent | WorkflowNodeStartedEvent | WorkflowNodeFinishedEvent, LLMState, ResponseT]:
+    source = EventSource[LLMEvent | WorkflowNodeStartedEvent | WorkflowNodeFinishedEvent]()
 
     async def run() -> tuple[LLMState, ResponseT]:
         async def forward_events() -> None:
             try:
                 async for event in response.events():
-                    if isinstance(event, BaseWorkflowProgressEvent):
+                    if isinstance(event, (WorkflowStartedEvent, WorkflowFinishedEvent)):
                         continue
                     await source.publish(event)
             except BaseException as exc:
@@ -251,6 +301,11 @@ class _CompactionSelection:
     previous_summary: str | None
 
 
+@dataclasses.dataclass
+class _ChatWorkflowRuntime:
+    result: Any = None
+
+
 class _ChatWorkflowHandler[ResponseT](BaseWorkflowHandler[LLMState, LLMEvent, ResponseT]):
     def update(self, events: Sequence[LLMEvent], state: LLMState) -> LLMState:
         current_state = state
@@ -260,6 +315,42 @@ class _ChatWorkflowHandler[ResponseT](BaseWorkflowHandler[LLMState, LLMEvent, Re
 
     def finish(self, state: LLMState) -> ResponseT:
         raise RuntimeError("chat workflow finished without an agent response")
+
+
+def _can_auto_compact(config: ChatCompactionConfig, model: LLMModelMetadata) -> bool:
+    return config.enabled and config.auto and _context_limit(config, model) is not None
+
+
+def _should_auto_compact(
+    state: LLMState,
+    config: ChatCompactionConfig,
+    model: LLMModelMetadata,
+) -> bool:
+    context_limit = _context_limit(config, model)
+    if not _can_auto_compact(config, model) or context_limit is None:
+        return False
+
+    output_reserve = config.reserve_output_tokens
+    if model.output_limit is not None:
+        output_reserve = min(output_reserve, model.output_limit)
+    usable_context_tokens = context_limit - output_reserve
+    if usable_context_tokens <= 0:
+        return False
+
+    token_count = (
+        state.last_usage.input_tokens if state.last_usage and state.last_usage.input_tokens is not None else None
+    )
+    token_count = token_count if token_count is not None else _estimate_input_tokens(state.history)
+    return token_count >= int(usable_context_tokens * config.threshold_ratio)
+
+
+def _context_limit(config: ChatCompactionConfig, model: LLMModelMetadata) -> int | None:
+    return config.max_context_tokens or model.context_limit
+
+
+def _estimate_input_tokens(messages: Sequence[LLMMessage]) -> int:
+    text = _format_transcript(messages)
+    return max(1, len(text) // 4)
 
 
 def _compacted_llm_messages(chat_messages: Sequence[ChatMessage]) -> tuple[LLMMessage, ...]:
@@ -315,9 +406,7 @@ def _make_compaction_prompt(selection: _CompactionSelection) -> str:
     parts = [_SUMMARY_PROMPT]
     if selection.previous_summary:
         parts.extend(("Previous summary:", selection.previous_summary))
-    parts.extend(
-        ("Conversation history to summarize:", _format_transcript(message.message for message in selection.head))
-    )
+    parts.append("Summarize the conversation history provided above into the requested structure.")
     return "\n\n".join(parts)
 
 

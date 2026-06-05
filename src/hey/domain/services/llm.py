@@ -22,6 +22,7 @@ from hey.domain.entities.llm import (
     LLMSignal,
     LLMSpec,
     LLMState,
+    LLMUsageStats,
     RunToolCall,
     TextContent,
     ToolCallRecord,
@@ -154,6 +155,8 @@ def update_llm_state(
 
     for event in events:
         match event:
+            case EmitLLMSignal(signal={"type": "turn_done", "usage": usage}):
+                state = dataclasses.replace(state, last_usage=LLMUsageStats.from_usage(usage))
             case EmitLLMMessage(message=message):
                 new_messages.append(message)
                 if message["role"] == "assistant":

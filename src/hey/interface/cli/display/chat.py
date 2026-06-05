@@ -78,6 +78,16 @@ class ChatDisplay:
         self._start_live(Columns([Spinner("dots")]))
         self._phase = _Phase.WAITING
 
+    def show_compacting(self) -> None:
+        self._stop_live()
+        self._finish_thinking()
+        self._start_live(Spinner("dots", text="[dim]Compacting context...[/dim]"))
+        self._phase = _Phase.WAITING
+
+    def hide_compacting(self) -> None:
+        self._stop_live()
+        self._phase = _Phase.IDLE
+
     def append_thinking_delta(self, delta: str) -> None:
         self._phase = _Phase.STREAMING
         writer = self._ensure_thinking_writer()

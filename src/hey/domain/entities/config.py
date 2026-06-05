@@ -26,6 +26,7 @@ class MCPServerConfig(BaseModel):
 
 class ChatCompactionConfig(BaseModel):
     enabled: bool = True
+    auto: bool = False
     threshold_ratio: float = Field(default=0.8, gt=0, le=1)
     max_context_tokens: int | None = Field(default=None, gt=0)
     reserve_output_tokens: int = Field(default=20_000, ge=0)
