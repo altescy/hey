@@ -1,7 +1,7 @@
 import dataclasses
-from typing import Protocol, Self
+from typing import Any, Protocol, Self
 
-from hey.domain.entities.chat import ChatMessage, ChatSession, ChatSessionID
+from hey.domain.entities.chat import ChatMessage, ChatMessageKind, ChatSession, ChatSessionID
 from hey.domain.entities.llm import LLMMessage
 from hey.domain.entities.project import ProjectID
 
@@ -36,6 +36,9 @@ class IChatRepository(Protocol):
         self,
         session_id: ChatSessionID,
         message: LLMMessage,
+        *,
+        kind: ChatMessageKind = "normal",
+        metadata: dict[str, Any] | None = None,
     ) -> ChatMessage: ...
     def get_session_by_id(
         self,

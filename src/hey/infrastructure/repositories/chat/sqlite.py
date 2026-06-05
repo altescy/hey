@@ -1,11 +1,11 @@
 import json
 import sqlite3
 from pathlib import Path
-from typing import Final, Self
+from typing import Any, Final, Self
 
 from pydantic import TypeAdapter
 
-from hey.domain.entities.chat import ChatMessage, ChatMessageID, ChatSession, ChatSessionID
+from hey.domain.entities.chat import ChatMessage, ChatMessageID, ChatMessageKind, ChatSession, ChatSessionID
 from hey.domain.entities.llm import LLMMessage
 from hey.domain.entities.project import ProjectID
 from hey.domain.repositories.chat import (
@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id  INTEGER NOT NULL REFERENCES chat_sessions(id),
     message     TEXT    NOT NULL,
+    kind        TEXT    NOT NULL DEFAULT 'normal',
+    metadata    TEXT    NOT NULL DEFAULT '{}',
     created_at  TEXT    NOT NULL,
     updated_at  TEXT    NOT NULL
 )
@@ -67,6 +69,14 @@ class SQLiteChatRepository(IChatRepository):
         with self:
             self._conn.execute(_CREATE_SESSIONS_TABLE)
             self._conn.execute(_CREATE_MESSAGES_TABLE)
+            self._ensure_message_column("kind", "TEXT NOT NULL DEFAULT 'normal'")
+            self._ensure_message_column("metadata", "TEXT NOT NULL DEFAULT '{}'")
+
+    def _ensure_message_column(self, name: str, definition: str) -> None:
+        cursor = self._conn.execute("PRAGMA table_info(chat_messages)")
+        columns = {row["name"] for row in cursor.fetchall()}
+        if name not in columns:
+            self._conn.execute(f"ALTER TABLE chat_messages ADD COLUMN {name} {definition}")
 
     # ------------------------------------------------------------------
     # IChatRepository
@@ -86,18 +96,32 @@ class SQLiteChatRepository(IChatRepository):
             updated_at=timestamp,
         )
 
-    def create_message(self, session_id: ChatSessionID, message: LLMMessage) -> ChatMessage:
+    def create_message(
+        self,
+        session_id: ChatSessionID,
+        message: LLMMessage,
+        *,
+        kind: ChatMessageKind = "normal",
+        metadata: dict[str, Any] | None = None,
+    ) -> ChatMessage:
         timestamp = get_chat_timestamp()
         message_json = json.dumps(_LLM_MESSAGE_TA.dump_python(message))
+        metadata = metadata or {}
+        metadata_json = json.dumps(metadata)
         cursor = self._conn.execute(
-            "INSERT INTO chat_messages (session_id, message, created_at, updated_at) VALUES (?, ?, ?, ?)",
-            (int(session_id), message_json, timestamp.isoformat(), timestamp.isoformat()),
+            """
+            INSERT INTO chat_messages (session_id, message, kind, metadata, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (int(session_id), message_json, kind, metadata_json, timestamp.isoformat(), timestamp.isoformat()),
         )
         message_id = ChatMessageID(cursor.lastrowid)  # type: ignore[arg-type]
         return ChatMessage(
             id=message_id,
             session_id=session_id,
             message=message,
+            kind=kind,
+            metadata=metadata,
             created_at=timestamp,
             updated_at=timestamp,
         )
@@ -129,6 +153,17 @@ class SQLiteChatRepository(IChatRepository):
             updated_at=row["updated_at"],
         )
 
+    def _build_chat_message(self, row: sqlite3.Row) -> ChatMessage:
+        return ChatMessage(
+            id=ChatMessageID(row["id"]),
+            session_id=ChatSessionID(row["session_id"]),
+            message=_LLM_MESSAGE_TA.validate_python(json.loads(row["message"])),
+            kind=row["kind"],
+            metadata=json.loads(row["metadata"]),
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
     def get_messages_by_session_id(
         self,
         session_id: ChatSessionID,
@@ -139,16 +174,7 @@ class SQLiteChatRepository(IChatRepository):
             "SELECT * FROM chat_messages WHERE session_id = ? ORDER BY id ASC",
             (int(session_id),),
         )
-        all_messages = [
-            ChatMessage(
-                id=ChatMessageID(row["id"]),
-                session_id=ChatSessionID(row["session_id"]),
-                message=_LLM_MESSAGE_TA.validate_python(json.loads(row["message"])),
-                created_at=row["created_at"],
-                updated_at=row["updated_at"],
-            )
-            for row in cursor.fetchall()
-        ]
+        all_messages = [self._build_chat_message(row) for row in cursor.fetchall()]
         return self._build_message_response(all_messages, req)
 
     def get_messages_by_project_id(
@@ -167,16 +193,7 @@ class SQLiteChatRepository(IChatRepository):
             """,
             (str(project_id),),
         )
-        all_messages = [
-            ChatMessage(
-                id=ChatMessageID(row["id"]),
-                session_id=ChatSessionID(row["session_id"]),
-                message=_LLM_MESSAGE_TA.validate_python(json.loads(row["message"])),
-                created_at=row["created_at"],
-                updated_at=row["updated_at"],
-            )
-            for row in cursor.fetchall()
-        ]
+        all_messages = [self._build_chat_message(row) for row in cursor.fetchall()]
         return self._build_message_response(all_messages, req)
 
     def _build_message_response(

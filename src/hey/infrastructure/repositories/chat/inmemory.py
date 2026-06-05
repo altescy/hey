@@ -1,7 +1,7 @@
 from collections import defaultdict
-from typing import Self
+from typing import Any, Self
 
-from hey.domain.entities.chat import ChatMessage, ChatMessageID, ChatSession, ChatSessionID
+from hey.domain.entities.chat import ChatMessage, ChatMessageID, ChatMessageKind, ChatSession, ChatSessionID
 from hey.domain.entities.llm import LLMMessage
 from hey.domain.entities.project import ProjectID
 from hey.domain.repositories.chat import (
@@ -29,13 +29,23 @@ class InMemoryChatRepository(IChatRepository):
         self._sessions[session_id] = session
         return session
 
-    def create_message(self, session_id: ChatSessionID, message: LLMMessage) -> ChatMessage:
+    def create_message(
+        self,
+        session_id: ChatSessionID,
+        message: LLMMessage,
+        *,
+        kind: ChatMessageKind = "normal",
+        metadata: dict[str, Any] | None = None,
+    ) -> ChatMessage:
         message_id = ChatMessageID(len(self._messages[session_id]) + 1)
         timestamp = get_chat_timestamp()
+        metadata = metadata or {}
         chat_message = ChatMessage(
             id=message_id,
             session_id=session_id,
             message=message,
+            kind=kind,
+            metadata=metadata,
             created_at=timestamp,
             updated_at=timestamp,
         )

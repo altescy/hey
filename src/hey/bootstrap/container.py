@@ -9,6 +9,7 @@ from hey.domain.entities.tool import AskPermissionFunc
 from .factories import (
     build_agent_spec,
     build_chat_repository,
+    build_compaction_agent_spec,
     build_project_repository,
     build_tool_dependencies,
     build_tool_repository,
@@ -44,7 +45,16 @@ class Container:
             project_directory=project.directory,
             ask_permission=ask_permission,
         )
-        chat_usecase = AgentChatUseCase(agent=agent_spec, chat_repository=chat_repository)
+        compaction_agent_spec = build_compaction_agent_spec(
+            project.config.chat,
+            project_directory=project.directory,
+        )
+        chat_usecase = AgentChatUseCase(
+            agent=agent_spec,
+            compaction_agent=compaction_agent_spec,
+            compaction_config=project.config.chat.compaction,
+            chat_repository=chat_repository,
+        )
 
         return cls(
             project_usecase=project_usecase,

@@ -45,6 +45,15 @@ class RunChatInput(TypedDict):
     prompt: str
 
 
+class CompactChatInput(TypedDict):
+    session_id: ChatSessionID
+
+
+class CompactChatOutput(TypedDict):
+    compacted: bool
+    summary: str | None
+
+
 class GetProjectInput(TypedDict):
     path: str | PathLike
 

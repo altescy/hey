@@ -121,6 +121,25 @@ class ChatRepositoryContractTests:
         assert chat_msg.session_id == session.id
         assert chat_msg.message["role"] == "user"
 
+    def test_create_message_persists_kind_and_metadata(self) -> None:
+        repo = self.make_repository()
+        session = repo.create_session(_PROJECT_A)
+        msg = _user_message("summary")
+
+        chat_msg = repo.create_message(
+            session.id,
+            msg,
+            kind="summary",
+            metadata={"tail_start_message_id": 3},
+        )
+
+        assert chat_msg.kind == "summary"
+        assert chat_msg.metadata == {"tail_start_message_id": 3}
+
+        messages = repo.get_messages_by_session_id(session.id).results
+        assert messages[0].kind == "summary"
+        assert messages[0].metadata == {"tail_start_message_id": 3}
+
     def test_get_messages_by_session_id_returns_messages_in_order(self) -> None:
         repo = self.make_repository()
         session = repo.create_session(_PROJECT_A)

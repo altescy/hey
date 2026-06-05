@@ -24,11 +24,21 @@ class MCPServerConfig(BaseModel):
         return self
 
 
+class ChatCompactionConfig(BaseModel):
+    enabled: bool = True
+    threshold_ratio: float = Field(default=0.8, gt=0, le=1)
+    max_context_tokens: int | None = Field(default=None, gt=0)
+    reserve_output_tokens: int = Field(default=20_000, ge=0)
+    tail_turns: int = Field(default=2, ge=0)
+    preserve_recent_tokens: int | None = Field(default=None, gt=0)
+
+
 class ChatConfig(BaseModel):
     model: str = "gpt-5.2"
     instructions: str = "You are a helpful assistant."
     permission: ToolPermission = Field(default_factory=dict)
     session_timeout: float = Field(default=3600.0, description="Seconds of inactivity before a new session is started.")
+    compaction: ChatCompactionConfig = Field(default_factory=ChatCompactionConfig)
     mcp: Mapping[str, MCPServerConfig] = Field(default_factory=dict)
 
 
