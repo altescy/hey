@@ -1,13 +1,14 @@
 import dataclasses
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, assert_never
+from typing import Any, Final, assert_never
 
 from hey.domain.entities.llm import (
     Contextualizer,
     Engine,
     FinishReason,
     LLMMessage,
+    LLMModelMetadata,
     LLMSignal,
     LLMSpec,
     LLMState,
@@ -250,6 +251,49 @@ class LiteLLMContextualizer(Contextualizer[LiteLLMQuery, LLMState]):
         )
 
 
+# (context_limit, output_limit) for popular models reachable through litellm.
+# Keys are matched as full model strings; unknown models stay as None.
+_MODEL_LIMITS: Final[dict[str, tuple[int, int]]] = {
+    # OpenAI
+    "gpt-4.1": (1_047_576, 32_768),
+    "gpt-4.1-mini": (1_047_576, 32_768),
+    "gpt-4.1-nano": (1_047_576, 32_768),
+    "gpt-4o": (128_000, 16_384),
+    "gpt-4o-mini": (128_000, 16_384),
+    "o3": (200_000, 100_000),
+    "o3-mini": (200_000, 100_000),
+    "o4-mini": (200_000, 100_000),
+    # Anthropic
+    "claude-3-5-sonnet-latest": (200_000, 8_192),
+    "claude-3-5-haiku-latest": (200_000, 8_192),
+    "claude-3-7-sonnet-latest": (200_000, 64_000),
+    "claude-sonnet-4-5": (200_000, 64_000),
+    "claude-opus-4-7": (200_000, 32_000),
+    "claude-haiku-4-5": (200_000, 64_000),
+    # Google
+    "gemini/gemini-1.5-pro": (2_000_000, 8_192),
+    "gemini/gemini-2.0-flash-001": (1_048_576, 8_192),
+    "gemini/gemini-2.5-pro": (1_048_576, 65_536),
+    "gemini/gemini-2.5-flash": (1_048_576, 65_536),
+}
+
+
+def _resolve_litellm_limits(model: str) -> tuple[int | None, int | None]:
+    """Resolve (context_limit, output_limit) for a litellm model string.
+
+    Tries an exact match first, then strips a common `provider/` prefix
+    (e.g. ``anthropic/claude-...``) so that suffix-style routing still hits
+    the table.
+    """
+    if model in _MODEL_LIMITS:
+        return _MODEL_LIMITS[model]
+    if "/" in model:
+        suffix = model.split("/", 1)[1]
+        if suffix in _MODEL_LIMITS:
+            return _MODEL_LIMITS[suffix]
+    return None, None
+
+
 def get_litellm_spec(
     *,
     model: str,
@@ -257,4 +301,14 @@ def get_litellm_spec(
 ) -> LLMSpec[LiteLLMQuery]:
     engine = LiteLLMEngine(model=model)
     contextualizer = LiteLLMContextualizer(instructions=instructions)
-    return LLMSpec(engine=engine, contextualizer=contextualizer)
+    context_limit, output_limit = _resolve_litellm_limits(model)
+    return LLMSpec(
+        engine=engine,
+        contextualizer=contextualizer,
+        model=LLMModelMetadata(
+            provider_id="litellm",
+            model_id=model,
+            context_limit=context_limit,
+            output_limit=output_limit,
+        ),
+    )

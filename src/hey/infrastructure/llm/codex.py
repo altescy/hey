@@ -18,13 +18,14 @@ import json
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Final
 
 from hey.domain.entities.llm import (
     Contextualizer,
     Engine,
     FinishReason,
     LLMMessage,
+    LLMModelMetadata,
     LLMSignal,
     LLMSpec,
     LLMState,
@@ -319,6 +320,19 @@ class CodexContextualizer(Contextualizer[CodexQuery, LLMState]):
 # ---------------------------------------------------------------------------
 
 
+# (context_limit, output_limit) for known Codex (OpenAI Responses) models.
+_MODEL_LIMITS: Final[dict[str, tuple[int, int]]] = {
+    "gpt-4.1": (1_047_576, 32_768),
+    "gpt-4.1-mini": (1_047_576, 32_768),
+    "gpt-4.1-nano": (1_047_576, 32_768),
+    "gpt-4o": (128_000, 16_384),
+    "gpt-4o-mini": (128_000, 16_384),
+    "o3": (200_000, 100_000),
+    "o3-mini": (200_000, 100_000),
+    "o4-mini": (200_000, 100_000),
+}
+
+
 def get_codex_spec(
     *,
     model: str = "o4-mini",
@@ -327,4 +341,14 @@ def get_codex_spec(
     auth = CodexAuthProvider()
     engine = CodexEngine(model=model, auth=auth)
     contextualizer = CodexContextualizer(instructions=instructions)
-    return LLMSpec(engine=engine, contextualizer=contextualizer)
+    context_limit, output_limit = _MODEL_LIMITS.get(model, (None, None))
+    return LLMSpec(
+        engine=engine,
+        contextualizer=contextualizer,
+        model=LLMModelMetadata(
+            provider_id="codex",
+            model_id=model,
+            context_limit=context_limit,
+            output_limit=output_limit,
+        ),
+    )

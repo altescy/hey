@@ -7,6 +7,7 @@ from hey.core.workflow import (
     BaseWorkflowHandler,
     Continue,
     Control,
+    Stop,
     WorkflowExecutor,
     WorkflowFinishedEvent,
     WorkflowGraph,
@@ -63,3 +64,50 @@ async def test_executor_skips_node_by_cond_and_continues_dependents() -> None:
     finish_event = finish_events[0]
     assert finish_event.completed_nodes == 2
     assert finish_event.skipped_nodes == 1
+
+
+@pytest.mark.asyncio
+async def test_executor_collects_stop_result_without_mutating_remaining_during_iteration() -> None:
+    async def stop_node(_: _State) -> AsyncIterator[Control[str, tuple[str, ...]]]:
+        yield Continue("started")
+        yield Stop(("done",))
+
+    graph = WorkflowGraph[_State, str, tuple[str, ...]]().add("stop", stop_node)
+    executor = WorkflowExecutor[_State, str, tuple[str, ...]](_Handler())
+    response = await executor(graph, _State())
+
+    events = [event async for event in response.events()]
+    final_state, result = await response.collect()
+
+    assert final_state.executed == ("started",)
+    assert result == ("done",)
+    assert any(isinstance(event, WorkflowFinishedEvent) for event in events)
+
+
+@pytest.mark.asyncio
+async def test_executor_runs_terminal_after_skipped_conditional_dependency() -> None:
+    def never(_: _State) -> bool:
+        return False
+
+    async def no_events(_: _State) -> AsyncIterator[Control[str, tuple[str, ...]]]:
+        if False:
+            yield Continue("skipped")
+
+    async def finish(_: _State) -> AsyncIterator[Control[str, tuple[str, ...]]]:
+        yield Stop(("done",))
+
+    graph = (
+        WorkflowGraph[_State, str, tuple[str, ...]]()
+        .add("a", _node_event("a"))
+        .add("maybe", no_events, deps=("a",), cond=never)
+        .add("finish", finish, deps=("maybe",))
+    )
+    executor = WorkflowExecutor[_State, str, tuple[str, ...]](_Handler())
+    response = await executor(graph, _State())
+
+    events = [event async for event in response.events()]
+    final_state, result = await response.collect()
+
+    assert final_state.executed == ("a",)
+    assert result == ("done",)
+    assert any(isinstance(event, WorkflowFinishedEvent) for event in events)

@@ -90,6 +90,25 @@ def build_agent_spec(
     )
 
 
+def build_compaction_agent_spec(
+    config: ChatConfig,
+    *,
+    project_directory: Path | None = None,
+) -> LLMAgentSpec[str, str]:
+    return LLMAgentSpec(
+        llm=build_llm_spec(config, project_directory=project_directory),
+        instructions=(
+            "You are a precise conversation compaction agent. "
+            "Summarize only the provided conversation context for future continuation. "
+            "Do not call tools. Do not add facts that are not supported by the conversation."
+        ),
+        response_format=str,
+        tools=(),
+        permission={},
+        ask_permission=None,
+    )
+
+
 def build_project_repository() -> LocalProjectRepository:
     return LocalProjectRepository()
 

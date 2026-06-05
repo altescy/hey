@@ -15,11 +15,12 @@ import dataclasses
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Final
 
 from hey.domain.entities.llm import (
     Contextualizer,
     Engine,
+    LLMModelMetadata,
     LLMSignal,
     LLMSpec,
     LLMState,
@@ -95,6 +96,19 @@ class OpenCodeContextualizer(Contextualizer[OpenCodeQuery, LLMState]):
         )
 
 
+# OpenCode is a proxy to many providers; only well-known passthroughs are listed
+# here. Unlisted models fall back to None and disable auto-compaction.
+_MODEL_LIMITS: Final[dict[str, tuple[int, int]]] = {
+    "claude-3-5-sonnet": (200_000, 8_192),
+    "claude-3-7-sonnet": (200_000, 64_000),
+    "claude-sonnet-4": (200_000, 64_000),
+    "claude-sonnet-4-5": (200_000, 64_000),
+    "claude-opus-4-7": (200_000, 32_000),
+    "gpt-4o": (128_000, 16_384),
+    "gpt-4.1": (1_047_576, 32_768),
+}
+
+
 def get_opencode_spec(
     *,
     model: str,
@@ -109,4 +123,14 @@ def get_opencode_spec(
         )
     engine = OpenCodeEngine(model=model, base_url=base_url, api_key=key)
     contextualizer = OpenCodeContextualizer(instructions=instructions)
-    return LLMSpec(engine=engine, contextualizer=contextualizer)
+    context_limit, output_limit = _MODEL_LIMITS.get(model, (None, None))
+    return LLMSpec(
+        engine=engine,
+        contextualizer=contextualizer,
+        model=LLMModelMetadata(
+            provider_id="opencode",
+            model_id=model,
+            context_limit=context_limit,
+            output_limit=output_limit,
+        ),
+    )

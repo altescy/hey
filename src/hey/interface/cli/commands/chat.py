@@ -7,12 +7,14 @@ from rich.console import Console
 from rich.rule import Rule
 
 from hey.application.dto import (
+    CompactChatInput,
     CreateSessionInput,
     GetOrCreateSessionInput,
     GetProjectInput,
     RunChatInput,
 )
 from hey.bootstrap.container import Container
+from hey.core.workflow.events import WorkflowNodeFinishedEvent, WorkflowNodeStartedEvent
 from hey.domain.entities.llm import EmitLLMMessage, EmitLLMSignal, EmitToolResult
 
 from ..display.chat import ChatDisplay, ask_permission
@@ -25,6 +27,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 def _add_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--temporary", action="store_true", help="Use temporary in-memory storage for chat history.")
+    parser.add_argument("--compact", action="store_true", help="Compact the latest chat session and exit.")
     parser.add_argument(
         "--new-session", action="store_true", help="Start a new chat session instead of resuming the latest one."
     )
@@ -34,16 +37,25 @@ def run(args: argparse.Namespace) -> None:
     prompt = " ".join(args.prompt)
     temporary = args.temporary
     new_session = args.new_session
+    compact = args.compact
 
     if not sys.stdin.isatty():
         stdin_content = sys.stdin.read()
         if stdin_content:
             prompt = f"{prompt}\n---\n{stdin_content}" if prompt else stdin_content
 
-    asyncio.run(_run_chat(prompt, temporary, new_session))
+    if compact:
+        if prompt.strip():
+            raise SystemExit("--compact cannot be used with a prompt or stdin input.")
+        if temporary:
+            raise SystemExit("--compact cannot be used with --temporary.")
+        if new_session:
+            raise SystemExit("--compact cannot be used with --new-session.")
+
+    asyncio.run(_run_chat(prompt, temporary, new_session, compact))
 
 
-async def _run_chat(prompt: str, temporary: bool, new_session: bool) -> None:
+async def _run_chat(prompt: str, temporary: bool, new_session: bool, compact: bool) -> None:
     console = Console()
     display = ChatDisplay(console)
     permission_lock = asyncio.Lock()
@@ -71,6 +83,15 @@ async def _run_chat(prompt: str, temporary: bool, new_session: bool) -> None:
         console.print(Rule(f"[dim]New session started  ·  Session {session.id}[/dim]", style="dim"))
         console.print()
 
+    if compact:
+        with console.status("[dim]Compacting session...[/dim]", spinner="dots"):
+            output = await chat_usecase.compact(CompactChatInput(session_id=session.id))
+        if output["compacted"]:
+            console.print("[dim]Session compacted.[/dim]")
+        else:
+            console.print("[dim]Nothing to compact.[/dim]")
+        return
+
     display.show_waiting()
     async with chat_usecase.run(RunChatInput(session_id=session.id, prompt=prompt)) as response:
         async for event in response.events():
@@ -92,6 +113,10 @@ async def _run_chat(prompt: str, temporary: bool, new_session: bool) -> None:
                     display.finish_tool_call(message, status, markdown)
                     if not display.has_pending_tool_calls:
                         display.show_waiting()
+                case WorkflowNodeStartedEvent(node_name="maybe_compact"):
+                    display.show_compacting()
+                case WorkflowNodeFinishedEvent(node_name="maybe_compact"):
+                    display.hide_compacting()
     display.done()
     console.print()
 

@@ -22,13 +22,14 @@ import dataclasses
 import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Final
 
 from hey.domain.entities.llm import (
     Contextualizer,
     Engine,
     FinishReason,
     LLMMessage,
+    LLMModelMetadata,
     LLMSignal,
     LLMSpec,
     LLMState,
@@ -358,6 +359,20 @@ class CopilotContextualizer(Contextualizer[CopilotQuery, LLMState]):
 # ---------------------------------------------------------------------------
 
 
+# (context_limit, output_limit) for known GitHub Copilot Chat models.
+_MODEL_LIMITS: Final[dict[str, tuple[int, int]]] = {
+    "gpt-4o": (128_000, 4_096),
+    "gpt-4o-mini": (128_000, 4_096),
+    "gpt-4.1": (128_000, 16_384),
+    "claude-3.5-sonnet": (200_000, 8_192),
+    "claude-3.7-sonnet": (200_000, 16_384),
+    "claude-sonnet-4": (200_000, 16_384),
+    "gemini-2.0-flash-001": (1_048_576, 8_192),
+    "o3-mini": (200_000, 100_000),
+    "o4-mini": (200_000, 100_000),
+}
+
+
 def get_copilot_spec(
     *,
     model: str,
@@ -367,4 +382,14 @@ def get_copilot_spec(
     auth = CopilotAuthProvider(github_domain=github_domain)
     engine = CopilotEngine(model=model, auth=auth)
     contextualizer = CopilotContextualizer(instructions=instructions)
-    return LLMSpec(engine=engine, contextualizer=contextualizer)
+    context_limit, output_limit = _MODEL_LIMITS.get(model, (None, None))
+    return LLMSpec(
+        engine=engine,
+        contextualizer=contextualizer,
+        model=LLMModelMetadata(
+            provider_id="github-copilot",
+            model_id=model,
+            context_limit=context_limit,
+            output_limit=output_limit,
+        ),
+    )

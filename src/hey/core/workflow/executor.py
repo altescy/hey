@@ -176,20 +176,21 @@ class WorkflowExecutor[StateT, EventT, TerminalT]:
                 if stop is None and maybe_stop is not None:
                     stop = maybe_stop
 
-            if stop is not None:
-                remaining.difference_update(
-                    node for node in remaining if status[node] in (_NodeStatus.COMPLETED, _NodeStatus.SKIPPED)
-                )
-                execution.skipped_nodes += len(remaining)
-                await source.publish(
-                    WorkflowFinishedEvent(
-                        total_nodes=execution.total_nodes,
-                        completed_nodes=execution.completed_nodes,
-                        skipped_nodes=execution.skipped_nodes,
+                if stop is not None:
+                    finished_nodes = tuple(
+                        node for node in remaining if status[node] in (_NodeStatus.COMPLETED, _NodeStatus.SKIPPED)
                     )
-                )
-                await source.aclose()
-                return current_state, stop.result
+                    remaining.difference_update(finished_nodes)
+                    execution.skipped_nodes += len(remaining)
+                    await source.publish(
+                        WorkflowFinishedEvent(
+                            total_nodes=execution.total_nodes,
+                            completed_nodes=execution.completed_nodes,
+                            skipped_nodes=execution.skipped_nodes,
+                        )
+                    )
+                    await source.aclose()
+                    return current_state, stop.result
 
             for node in batch_nodes:
                 if status[node] in (_NodeStatus.COMPLETED, _NodeStatus.SKIPPED):

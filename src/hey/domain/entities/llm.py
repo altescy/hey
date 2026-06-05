@@ -144,10 +144,38 @@ class ToolDefinition(TypedDict):
 
 
 @dataclasses.dataclass(frozen=True)
+class LLMUsageStats:
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    cache_read_tokens: int | None = None
+    cache_write_tokens: int | None = None
+    reasoning_tokens: int | None = None
+
+    @classmethod
+    def from_usage(cls, usage: Usage) -> "LLMUsageStats":
+        return cls(
+            input_tokens=usage.get("input_tokens"),
+            output_tokens=usage.get("output_tokens"),
+            cache_read_tokens=usage.get("cache_read_tokens"),
+            cache_write_tokens=usage.get("cache_write_tokens"),
+            reasoning_tokens=usage.get("reasoning_tokens"),
+        )
+
+
+@dataclasses.dataclass(frozen=True)
 class LLMState:
     history: tuple[LLMMessage, ...] = ()
     tools: tuple[ToolDefinition, ...] = ()
     finalizer: ToolDefinition | None = None
+    last_usage: LLMUsageStats | None = None
+
+
+@dataclasses.dataclass(frozen=True)
+class LLMModelMetadata:
+    provider_id: str | None = None
+    model_id: str | None = None
+    context_limit: int | None = None
+    output_limit: int | None = None
 
 
 type LLMEngine[QueryT] = Engine[QueryT, LLMSignal]
@@ -157,6 +185,7 @@ type LLMEngine[QueryT] = Engine[QueryT, LLMSignal]
 class LLMSpec[QueryT]:
     engine: LLMEngine[QueryT]
     contextualizer: Contextualizer[QueryT, LLMState]
+    model: LLMModelMetadata = dataclasses.field(default_factory=LLMModelMetadata)
 
 
 @dataclasses.dataclass(frozen=True)

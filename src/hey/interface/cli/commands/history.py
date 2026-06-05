@@ -58,6 +58,13 @@ async def _run_history(args: argparse.Namespace) -> None:
         ts = chat_message.created_at.strftime("%Y-%m-%d %H:%M:%S")
         i += 1
 
+        if chat_message.kind == "summary":
+            tail_start = chat_message.metadata.get("tail_start_message_id")
+            tail_text = f" · tail starts at message #{tail_start}" if tail_start is not None else ""
+            console.print(Rule(f"[yellow]Compacted[/yellow] · [dim]{ts}{tail_text}[/dim]", style="yellow"))
+            console.print()
+            continue
+
         match msg:
             case {"role": "user"}:
                 console.print(render_user_message_panel(msg, ts))
