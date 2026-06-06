@@ -1,7 +1,12 @@
 import pytest
 
 from hey.domain.entities.llm import AssistantMessage, SystemMessage, TextContent, ToolResultMessage, UserMessage
-from hey.infrastructure.llm.codex import CodexQuery, _build_request_body, _message_to_input_item, _raise_for_codex_status
+from hey.infrastructure.llm.codex import (
+    CodexQuery,
+    _build_request_body,
+    _message_to_input_item,
+    _raise_for_codex_status,
+)
 
 
 def test_codex_user_message_uses_structured_input_text() -> None:
