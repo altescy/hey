@@ -5,7 +5,6 @@ import yaml
 from hey.domain.entities.config import HeyConfig
 from hey.domain.entities.project import Project
 from hey.domain.repositories.project import IProjectRepository
-from hey.domain.services.config import get_default_config
 from hey.domain.services.project import get_hey_config_path, get_project_id_from_path
 
 
@@ -17,7 +16,7 @@ class LocalProjectRepository(IProjectRepository):
             with config_path.open() as yaml_file:
                 config = HeyConfig.model_validate(yaml.safe_load(yaml_file))
         else:
-            config = get_default_config()
+            raise FileNotFoundError(f"{config_path} is required and must define chat.model")
 
         return Project(id=project_id, directory=directory, config=config)
 
