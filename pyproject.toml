@@ -34,6 +34,12 @@ web = [
 bedrock = [
     "boto3",
 ]
+all = [
+    "litellm>=1.83.4",
+    "markitdown>=0.1.0",
+    "ddgs>=9.0.0",
+    "boto3",
+]
 
 [build-system]
 requires = ["uv_build>=0.11.6,<0.12.0"]

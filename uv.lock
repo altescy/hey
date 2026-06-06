@@ -411,6 +411,12 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+all = [
+    { name = "boto3" },
+    { name = "ddgs" },
+    { name = "litellm" },
+    { name = "markitdown" },
+]
 bedrock = [
     { name = "boto3" },
 ]
@@ -432,16 +438,20 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "boto3", marker = "extra == 'all'" },
     { name = "boto3", marker = "extra == 'bedrock'" },
+    { name = "ddgs", marker = "extra == 'all'", specifier = ">=9.0.0" },
     { name = "ddgs", marker = "extra == 'web'", specifier = ">=9.0.0" },
     { name = "httpx", specifier = ">=0.28.0" },
+    { name = "litellm", marker = "extra == 'all'", specifier = ">=1.83.4" },
     { name = "litellm", marker = "extra == 'litellm'", specifier = ">=1.83.4" },
+    { name = "markitdown", marker = "extra == 'all'", specifier = ">=0.1.0" },
     { name = "markitdown", marker = "extra == 'web'", specifier = ">=0.1.0" },
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "pydantic-settings", specifier = ">=2.14.0" },
     { name = "rich", specifier = ">=14.3.4" },
 ]
-provides-extras = ["litellm", "copilot", "codex", "opencode", "web", "bedrock"]
+provides-extras = ["litellm", "copilot", "codex", "opencode", "web", "bedrock", "all"]
 
 [package.metadata.requires-dev]
 dev = [
