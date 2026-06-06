@@ -1,7 +1,6 @@
 import asyncio
 import os
 from enum import Enum, auto
-from functools import partial
 from typing import Literal, TextIO
 
 from rich.columns import Columns
@@ -182,6 +181,31 @@ class ChatDisplay:
         self._stop_live()
         self._phase = _Phase.IDLE
 
+    async def _ainput(self, prompt: str, stream: TextIO) -> str | None:
+        """Read a line from *stream* in a daemon thread so the event loop is not blocked.
+
+        Returns ``None`` on EOF so the caller can distinguish it from an empty
+        line (the user pressed Enter without typing anything).
+        """
+        import threading
+
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[str | None] = loop.create_future()
+
+        def _read() -> None:
+            try:
+                result = self._console.input(prompt, stream=stream)
+            except EOFError:
+                loop.call_soon_threadsafe(future.set_result, None)
+            except Exception as exc:
+                loop.call_soon_threadsafe(future.set_exception, exc)
+            else:
+                loop.call_soon_threadsafe(future.set_result, result)
+
+        t = threading.Thread(target=_read, daemon=True)
+        t.start()
+        return await future
+
     async def ask_permission(self, record: ToolCallRecord) -> Literal["allow", "deny"]:
         self.done()
         async with self._permission_lock:
@@ -193,10 +217,13 @@ class ChatDisplay:
             )
             writer.finish()
             while True:
-                answer = await asyncio.to_thread(
-                    partial(self._console.input, stream=tty_in),
+                answer = await self._ainput(
                     f"{writer.prefix}Allow this tool call? (y/n) ",
+                    tty_in,
                 )
+                if answer is None:
+                    # EOF (e.g. Ctrl+D) – treat as deny.
+                    return "deny"
                 match answer.strip().lower():
                     case "y":
                         return "allow"

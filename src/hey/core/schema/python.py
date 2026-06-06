@@ -43,4 +43,3 @@ def generate_function_signature[ReturnT](func: Callable[..., ReturnT], /) -> Fun
         parameters_annotation=parameters_annotation,  # pyright: ignore[reportArgumentType],
         return_annotation=return_annotation,
     )
-

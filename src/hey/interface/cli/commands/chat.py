@@ -50,7 +50,12 @@ def run(args: argparse.Namespace) -> None:
         if new_session:
             raise SystemExit("--compact cannot be used with --new-session.")
 
-    asyncio.run(_run_chat(prompt, temporary, new_session, compact))
+    try:
+        asyncio.run(_run_chat(prompt, temporary, new_session, compact))
+    except KeyboardInterrupt:
+        console = Console()
+        console.print()
+        raise SystemExit(130)
 
 
 async def _run_chat(prompt: str, temporary: bool, new_session: bool, compact: bool) -> None:
