@@ -41,7 +41,15 @@ from hey.core.workflow.source import EventSource
 from hey.domain.entities.agent import LLMAgentSpec
 from hey.domain.entities.chat import ChatMessage, ChatSession, ChatSessionID
 from hey.domain.entities.config import ChatCompactionConfig
-from hey.domain.entities.llm import LLMEvent, LLMMessage, LLMModelMetadata, LLMState, SystemMessage, TextContent
+from hey.domain.entities.llm import (
+    LLMEvent,
+    LLMMessage,
+    LLMModelMetadata,
+    LLMState,
+    SystemMessage,
+    TextContent,
+    ToolResultMessage,
+)
 from hey.domain.entities.project import ProjectID
 from hey.domain.repositories.chat import (
     ChatMessageRetrievalRequest,
@@ -281,15 +289,25 @@ def _filter_chat_workflow_events[ResponseT](
                 await source.aclose()
 
         forward_task = asyncio.create_task(forward_events())
+        generator_exit = False
         try:
             result = await response.collect()
             await forward_task
             return result
-        except BaseException:
-            forward_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await forward_task
+        except BaseException as exc:
+            generator_exit = isinstance(exc, GeneratorExit)
+            if not forward_task.done():
+                forward_task.cancel()
+                if not generator_exit:
+                    with suppress(asyncio.CancelledError):
+                        await forward_task
             raise
+        finally:
+            if not source._closed:  # type: ignore[attr-defined]
+                if generator_exit:
+                    source._closed = True  # type: ignore[attr-defined]
+                else:
+                    await source.aclose()
 
     return WorkflowResponse(source, run)
 
@@ -356,15 +374,59 @@ def _estimate_input_tokens(messages: Sequence[LLMMessage]) -> int:
 def _compacted_llm_messages(chat_messages: Sequence[ChatMessage]) -> tuple[LLMMessage, ...]:
     latest_summary = next((message for message in reversed(chat_messages) if message.kind == "summary"), None)
     if latest_summary is None:
-        return tuple(message.message for message in chat_messages if message.kind == "normal")
+        messages = tuple(message.message for message in chat_messages if message.kind == "normal")
+    else:
+        tail_start_message_id = _metadata_int(latest_summary.metadata, "tail_start_message_id")
+        messages = tuple(
+            message.message
+            for message in chat_messages
+            if message.kind == "normal" and (tail_start_message_id is None or int(message.id) >= tail_start_message_id)
+        )
+        messages = (latest_summary.message, *messages)
+    return _ensure_tool_results(messages)
 
-    tail_start_message_id = _metadata_int(latest_summary.metadata, "tail_start_message_id")
-    tail = tuple(
-        message.message
-        for message in chat_messages
-        if message.kind == "normal" and (tail_start_message_id is None or int(message.id) >= tail_start_message_id)
-    )
-    return (latest_summary.message, *tail)
+
+def _ensure_tool_results(messages: tuple[LLMMessage, ...]) -> tuple[LLMMessage, ...]:
+    """Inject missing tool_result messages so the LLM history is always valid.
+
+    When a program is interrupted during tool execution (e.g. Ctrl+C during
+    permission confirmation), the tool_result message may not be saved. This
+    causes the LLM API to reject the next request with "No tool output found".
+    """
+    tool_call_ids: set[str] = set()
+    existing_results: set[str] = set()
+
+    for msg in messages:
+        if msg["role"] == "assistant":
+            for record in msg.get("tool_calls", ()):
+                tool_call_ids.add(record["id"])
+        elif msg["role"] == "tool_result":
+            existing_results.add(msg["tool_call_id"])
+
+    missing_ids = tool_call_ids - existing_results
+    if not missing_ids:
+        return messages
+
+    new_messages = list(messages)
+    for msg in messages:
+        if msg["role"] == "assistant":
+            for record in msg.get("tool_calls", ()):
+                if record["id"] in missing_ids:
+                    new_messages.append(
+                        ToolResultMessage(
+                            role="tool_result",
+                            tool_call_id=record["id"],
+                            parts=(
+                                TextContent(
+                                    type="text",
+                                    text="Error: tool call was interrupted before a result was produced",
+                                ),
+                            ),
+                        )
+                    )
+                    missing_ids.discard(record["id"])
+
+    return tuple(new_messages)
 
 
 def _select_compaction_messages(

@@ -1,4 +1,5 @@
 import asyncio
+import re
 from typing import Optional
 
 from hey.domain.entities.tool import ToolSpec
@@ -27,6 +28,16 @@ like cat, echo, or sed.
 - Use this tool for running tests, builds, git operations, or any \
 process that has no dedicated tool.
 """.strip()
+
+_BACKTICK_RUN_RE = re.compile(r"`+")
+
+
+def _code_fence_for(*texts: str) -> str:
+    max_backticks = 0
+    for text in texts:
+        for match in _BACKTICK_RUN_RE.finditer(text):
+            max_backticks = max(max_backticks, len(match.group(0)))
+    return "`" * max(3, max_backticks + 1)
 
 
 def is_available() -> bool:
@@ -65,10 +76,12 @@ def create_tool_spec() -> ToolSpec:
     async def render_markdown(
         output: str, command: str, workdir: Optional[str] = None, timeout: Optional[int] = None
     ) -> str:
+        del timeout
         prefix = f"$ {command}"
         if workdir:
             prefix = f"[{workdir}] {prefix}"
-        return f"```\n{prefix}\n\n{output}\n```"
+        fence = _code_fence_for(prefix, output)
+        return f"{fence}\n{prefix}\n\n{output}\n{fence}"
 
     return generate_tool_spec_from_callable(
         bash,

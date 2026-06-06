@@ -2,7 +2,7 @@ import inspect
 import typing
 from collections.abc import Awaitable, Callable, Coroutine
 from types import UnionType
-from typing import Any, NamedTuple, TypedDict, Union
+from typing import Any, NamedTuple, NotRequired, TypedDict, Union
 
 
 def _reveal_annotation(schema: Any) -> Any:
@@ -26,9 +26,16 @@ def generate_function_signature[ReturnT](func: Callable[..., ReturnT], /) -> Fun
     if sig.return_annotation is inspect.Signature.empty:
         raise ValueError(f"Function {func} must have a return annotation")
 
+    parameter_fields = {}
+    for name, param in sig.parameters.items():
+        annotation = Any if param.annotation is inspect.Parameter.empty else param.annotation
+        if param.default is not inspect.Parameter.empty:
+            annotation = NotRequired[annotation]
+        parameter_fields[name] = annotation
+
     parameters_annotation = TypedDict(
         f"{func.__name__}__parameters",
-        {name: param.annotation for name, param in sig.parameters.items()},  # pyright: ignore[reportGeneralTypeIssues],
+        parameter_fields,  # pyright: ignore[reportArgumentType],
     )
     return_annotation = _reveal_annotation(sig.return_annotation)
     return FunctionSignature(

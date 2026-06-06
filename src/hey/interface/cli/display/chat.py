@@ -1,11 +1,13 @@
 import asyncio
+import os
 from enum import Enum, auto
-from typing import Literal
+from typing import Literal, TextIO
 
 from rich.columns import Columns
 from rich.console import Console, Group, RenderableType
 from rich.live import Live
 from rich.markdown import Markdown
+from rich.rule import Rule
 from rich.spinner import Spinner
 
 from hey.core.markdown import MarkdownBuffer, reduce_markdown
@@ -21,6 +23,14 @@ class _Phase(Enum):
     STREAMING = auto()
 
 
+class _BlockType(Enum):
+    SESSION_START = auto()
+    THINKING = auto()
+    TEXT = auto()
+    TOOL_RESULT = auto()
+    PERMISSION = auto()
+
+
 class ChatDisplay:
     def __init__(self, console: Console) -> None:
         self._console = console
@@ -29,10 +39,18 @@ class ChatDisplay:
         self._thinking_writer: BorderedWriter | None = None
         self._md_buffer: MarkdownBuffer | None = None
         self._tool_calls: dict[str, ToolCallRecord] = {}
+        self._previous_block_type: _BlockType | None = None
+        self._permission_lock = asyncio.Lock()
 
     @property
     def has_pending_tool_calls(self) -> bool:
         return bool(self._tool_calls)
+
+    @staticmethod
+    def _get_tty_in() -> TextIO:
+        if os.name == "nt":
+            return open("CONIN$", "r", encoding="utf-8")
+        return open("/dev/tty", "r", encoding="utf-8")
 
     def _start_live(self, renderable: RenderableType) -> None:
         self._stop_live()
@@ -41,12 +59,23 @@ class ChatDisplay:
 
     def _stop_live(self) -> None:
         if self._live is not None:
-            self._live.stop()
+            live = self._live
             self._live = None
+            live.stop()
 
     def _update_live(self, renderable: RenderableType) -> None:
         if self._live is not None:
             self._live.update(renderable)
+
+    def _apply_spacing(self, block_type: _BlockType) -> None:
+        if self._previous_block_type is not None:
+            if self._previous_block_type != block_type or block_type == _BlockType.PERMISSION:
+                self._console.print()
+        self._previous_block_type = block_type
+
+    def _print(self, renderable: RenderableType, block_type: _BlockType) -> None:
+        self._apply_spacing(block_type)
+        self._console.print(renderable)
 
     def _streaming_renderable(self) -> RenderableType:
         pending = self._md_buffer.text if self._md_buffer else ""
@@ -57,7 +86,6 @@ class ChatDisplay:
     def _ensure_thinking_writer(self) -> BorderedWriter:
         if self._thinking_writer is None:
             self._stop_live()
-            self._console.print()
             self._thinking_writer = BorderedWriter(
                 self._console,
                 border="┃",
@@ -72,7 +100,11 @@ class ChatDisplay:
         if self._thinking_writer is not None:
             self._thinking_writer.finish()
             self._thinking_writer = None
-            self._console.print()
+
+    def show_session_start(self, session_id: str) -> None:
+        self._print(
+            Rule(f"[dim]New session started  ·  Session {session_id}[/dim]", style="dim"), _BlockType.SESSION_START
+        )
 
     def show_waiting(self) -> None:
         self._start_live(Columns([Spinner("dots")]))
@@ -109,7 +141,7 @@ class ChatDisplay:
         if committed:
             self._stop_live()
             for block in committed:
-                self._console.print(Markdown(block))
+                self._print(Markdown(block), _BlockType.TEXT)
             self._start_live(self._streaming_renderable())
 
         self._update_live(self._streaming_renderable())
@@ -120,7 +152,7 @@ class ChatDisplay:
         self._finish_thinking()
         remaining = self._md_buffer.text if self._md_buffer else ""
         if remaining:
-            self._console.print(Markdown(remaining))
+            self._print(Markdown(remaining), _BlockType.TEXT)
         self._md_buffer = None
 
     def add_pending_tool_call(self, record: ToolCallRecord) -> None:
@@ -137,42 +169,71 @@ class ChatDisplay:
 
         record = self._tool_calls.pop(result["tool_call_id"], None)
         if record is not None:
-            self._console.print(f"{tool_call_status_icon(status)} {render_tool_call(record)}")
+            self._print(f"{tool_call_status_icon(status)} {render_tool_call(record)}", _BlockType.TOOL_RESULT)
             if markdown:
-                self._console.print()
-                self._console.print(Markdown(markdown))
-                self._console.print()
+                self._print(Markdown(markdown), _BlockType.TOOL_RESULT)
             else:
-                self._console.print(
-                    f"  [dim]╰─ {render_llm_message(result, width=get_console_width(self._console) - 6)}[/dim]"
+                self._print(
+                    f"  [dim]╰─ {render_llm_message(result, width=get_console_width(self._console) - 6)}[/dim]",
+                    _BlockType.TOOL_RESULT,
                 )
-                self._console.print()
 
     def done(self) -> None:
-        self._stop_live()
-        self._phase = _Phase.IDLE
+        try:
+            self._stop_live()
+            self._finish_thinking()
+        finally:
+            self._phase = _Phase.IDLE
+            self._console.show_cursor(True)
 
+    async def _ainput(self, prompt: str, stream: TextIO) -> str | None:
+        """Read a line from *stream* in a daemon thread so the event loop is not blocked.
 
-async def ask_permission(
-    display: ChatDisplay,
-    console: Console,
-    lock: asyncio.Lock,
-    record: ToolCallRecord,
-) -> Literal["allow", "deny"]:
-    display.done()
-    async with lock:
-        console.print()
-        writer = BorderedWriter(console, border="┃", border_style="yellow", padding=1)
-        writer.write(f"[black bold on yellow] Permission required [/black bold on yellow] {render_tool_call(record)}")
-        writer.finish()
-        while True:
-            answer = await asyncio.to_thread(
-                console.input,
-                f"{writer.prefix}Allow this tool call? (y/n) ",
+        Returns ``None`` on EOF so the caller can distinguish it from an empty
+        line (the user pressed Enter without typing anything).
+        """
+        import threading
+
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[str | None] = loop.create_future()
+
+        def _read() -> None:
+            try:
+                result = self._console.input(prompt, stream=stream)
+            except EOFError:
+                loop.call_soon_threadsafe(future.set_result, None)
+            except Exception as exc:
+                loop.call_soon_threadsafe(future.set_exception, exc)
+            else:
+                loop.call_soon_threadsafe(future.set_result, result)
+
+        t = threading.Thread(target=_read, daemon=True)
+        t.start()
+        try:
+            return await future
+        except asyncio.CancelledError:
+            raise KeyboardInterrupt from None
+
+    async def ask_permission(self, record: ToolCallRecord) -> Literal["allow", "deny"]:
+        self.done()
+        async with self._permission_lock:
+            self._apply_spacing(_BlockType.PERMISSION)
+            tty_in = self._get_tty_in()
+            writer = BorderedWriter(self._console, border="┃", border_style="yellow", padding=1)
+            writer.write(
+                f"[black bold on yellow] Permission required [/black bold on yellow] {render_tool_call(record)}"
             )
-            console.print()
-            match answer.lower():
-                case "y":
-                    return "allow"
-                case "n":
+            writer.finish()
+            while True:
+                answer = await self._ainput(
+                    f"{writer.prefix}Allow this tool call? (y/n) ",
+                    tty_in,
+                )
+                if answer is None:
+                    # EOF (e.g. Ctrl+D) – treat as deny.
                     return "deny"
+                match answer.strip().lower():
+                    case "y":
+                        return "allow"
+                    case "n":
+                        return "deny"
