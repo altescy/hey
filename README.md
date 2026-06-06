@@ -55,6 +55,12 @@ After installation, the `hey` command is available system-wide.
 # Set your API key (example: OpenAI via litellm)
 export OPENAI_API_KEY=sk-...
 
+# Configure the model for this project
+cat > hey.yaml <<'YAML'
+chat:
+  model: openai/gpt-5.3
+YAML
+
 # Ask something in the current directory
 hey "what does this project do?"
 
@@ -74,8 +80,8 @@ hey --compact
 ## Configuration
 
 hey auto-discovers the project root by walking up from the current directory
-until it finds `hey.yaml` or `.git`. Drop a `hey.yaml` at the root of any
-project to configure it:
+until it finds `hey.yaml` or `.git`. A `hey.yaml` with `chat.model` is required
+because available providers depend on your environment and credentials:
 
 ```yaml
 chat:

@@ -1,9 +1,11 @@
 from collections.abc import Mapping
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 from .tool import ToolPermission
+
+NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
 class MCPServerConfig(BaseModel):
@@ -35,8 +37,8 @@ class ChatCompactionConfig(BaseModel):
 
 
 class ChatConfig(BaseModel):
-    model: str = "gpt-5.2"
-    instructions: str = "You are a helpful assistant."
+    model: NonEmptyString
+    instructions: str | None = None
     permission: ToolPermission = Field(default_factory=dict)
     session_timeout: float = Field(default=3600.0, description="Seconds of inactivity before a new session is started.")
     compaction: ChatCompactionConfig = Field(default_factory=ChatCompactionConfig)
@@ -44,4 +46,4 @@ class ChatConfig(BaseModel):
 
 
 class HeyConfig(BaseModel):
-    chat: ChatConfig = Field(default_factory=ChatConfig)
+    chat: ChatConfig
