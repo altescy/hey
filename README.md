@@ -1,12 +1,12 @@
-# hey
+# :wave: hey
 
-[![CI](https://github.com/altescy/hey/actions/workflows/ci.yml/badge.svg)](https://github.com/altescy/hey/actions/workflows/ci.yaml)
+[![CI](https://github.com/altescy/hey/actions/workflows/ci.yaml/badge.svg)](https://github.com/altescy/hey/actions/workflows/ci.yaml)
 [![Release](https://img.shields.io/github/v/release/altescy/hey)](https://github.com/altescy/hey/releases)
 [![License](https://img.shields.io/github/license/altescy/hey)](https://github.com/altescy/hey/blob/main/LICENSE)
 
 **hey** is a lightweight, project-aware AI agent for your terminal. Run `hey <your request>` and the agent reads files, edits code, executes shell commands, and fetches the web — all within a persistent, per-project conversation that picks up where you left off.
 
-```shell
+```text
 hey add a docstring to every public function in src/hey/core/agent/runtime.py
 ```
 
