@@ -1,10 +1,8 @@
 import argparse
 import asyncio
 import sys
-from functools import partial
 
 from rich.console import Console
-from rich.rule import Rule
 
 from hey.application.dto import (
     CompactChatInput,
@@ -17,7 +15,7 @@ from hey.bootstrap.container import Container
 from hey.core.workflow.events import WorkflowNodeFinishedEvent, WorkflowNodeStartedEvent
 from hey.domain.entities.llm import EmitLLMMessage, EmitLLMSignal, EmitToolResult
 
-from ..display.chat import ChatDisplay, ask_permission
+from ..display.chat import ChatDisplay
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -58,11 +56,10 @@ def run(args: argparse.Namespace) -> None:
 async def _run_chat(prompt: str, temporary: bool, new_session: bool, compact: bool) -> None:
     console = Console()
     display = ChatDisplay(console)
-    permission_lock = asyncio.Lock()
 
     container = Container.build(
         temporary=temporary,
-        ask_permission=partial(ask_permission, display, console, permission_lock),
+        ask_permission=display.ask_permission,
     )
     chat_usecase = container.chat_usecase
     project_usecase = container.project_usecase
@@ -80,8 +77,7 @@ async def _run_chat(prompt: str, temporary: bool, new_session: bool, compact: bo
         session, is_new = result["session"], result["is_new"]
 
     if is_new and not temporary:
-        console.print(Rule(f"[dim]New session started  ·  Session {session.id}[/dim]", style="dim"))
-        console.print()
+        display.show_session_start(str(session.id))
 
     if compact:
         with console.status("[dim]Compacting session...[/dim]", spinner="dots"):
@@ -105,8 +101,6 @@ async def _run_chat(prompt: str, temporary: bool, new_session: bool, compact: bo
                 case EmitLLMMessage(message=message):
                     display.commit_message(message)
                     if message["role"] == "assistant":
-                        if message["tool_calls"]:
-                            console.print()
                         for record in message["tool_calls"]:
                             display.add_pending_tool_call(record)
                 case EmitToolResult(message=message, status=status, view=markdown):
@@ -118,6 +112,5 @@ async def _run_chat(prompt: str, temporary: bool, new_session: bool, compact: bo
                 case WorkflowNodeFinishedEvent(node_name="maybe_compact"):
                     display.hide_compacting()
     display.done()
-    console.print()
 
     await response.collect()
