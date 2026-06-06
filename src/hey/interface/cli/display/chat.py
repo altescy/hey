@@ -1,6 +1,8 @@
 import asyncio
+import os
 from enum import Enum, auto
-from typing import Literal
+from functools import partial
+from typing import Literal, TextIO
 
 from rich.columns import Columns
 from rich.console import Console, Group, RenderableType
@@ -44,6 +46,12 @@ class ChatDisplay:
     @property
     def has_pending_tool_calls(self) -> bool:
         return bool(self._tool_calls)
+
+    @staticmethod
+    def _get_tty_in() -> TextIO:
+        if os.name == "nt":
+            return open("CONIN$", "r", encoding="utf-8")
+        return open("/dev/tty", "r", encoding="utf-8")
 
     def _start_live(self, renderable: RenderableType) -> None:
         self._stop_live()
@@ -178,6 +186,7 @@ class ChatDisplay:
         self.done()
         async with self._permission_lock:
             self._apply_spacing(_BlockType.PERMISSION)
+            tty_in = self._get_tty_in()
             writer = BorderedWriter(self._console, border="┃", border_style="yellow", padding=1)
             writer.write(
                 f"[black bold on yellow] Permission required [/black bold on yellow] {render_tool_call(record)}"
@@ -185,10 +194,10 @@ class ChatDisplay:
             writer.finish()
             while True:
                 answer = await asyncio.to_thread(
-                    self._console.input,
+                    partial(self._console.input, stream=tty_in),
                     f"{writer.prefix}Allow this tool call? (y/n) ",
                 )
-                match answer.lower():
+                match answer.strip().lower():
                     case "y":
                         return "allow"
                     case "n":
