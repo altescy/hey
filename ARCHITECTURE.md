@@ -90,9 +90,15 @@ graph TD
 |---------------------|------------------------------------------|----------------|
 | `github-copilot/…`  | `infrastructure.llm.copilot`            | `copilot`      |
 | `codex/…`           | `infrastructure.llm.codex`              | `codex`        |
+| `opencode-go/…`     | `infrastructure.llm.opencode`           | `opencode`     |
+| `opencode/…`        | `infrastructure.llm.opencode`           | `opencode`     |
 | (anything else)     | `infrastructure.llm.litellm` (default)  | `litellm`      |
 
+Note: `opencode-go/…` routes to `https://opencode.ai/zen/go/v1/chat/completions`; `opencode/…` routes to `https://opencode.ai/zen/v1/chat/completions`. Both require the `OPENCODE_API_KEY` environment variable.
+
 Backend imports are deferred to call time so missing extras only fail when you actually try to use that backend.
+
+`build_llm_spec` also calls `build_agents_instructions(project_directory)` (`domain/services/agentsmd.py`) to load `AGENTS.md` files and prepend them to the system prompt. Discovery order: nearest `AGENTS.md` walking up from the project root, then `~/.config/hey/AGENTS.md`. The two sources are concatenated; the result is merged with `ChatConfig.instructions`.
 
 ### Tool registry
 
@@ -271,6 +277,7 @@ Optional extras gate entire backends/toolsets (`pyproject.toml`):
 | `litellm`  | Default LLM backend (`infrastructure.llm.litellm`).                    |
 | `copilot`  | GitHub Copilot backend (`github-copilot/...` model prefix).            |
 | `codex`    | Codex backend (`codex/...` model prefix).                              |
+| `opencode` | OpenCode backend (`opencode/...` and `opencode-go/...` model prefixes). |
 | `bedrock`  | AWS Bedrock support (via litellm + boto3).                             |
 | `web`      | `web_fetch` (markitdown) and `web_search` (ddgs) built-in tools.       |
 
