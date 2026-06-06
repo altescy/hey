@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import sys
+from contextlib import suppress
 
 from rich.console import Console
 
@@ -50,12 +51,41 @@ def run(args: argparse.Namespace) -> None:
         if new_session:
             raise SystemExit("--compact cannot be used with --new-session.")
 
+    loop = asyncio.new_event_loop()
     try:
-        asyncio.run(_run_chat(prompt, temporary, new_session, compact))
-    except KeyboardInterrupt:
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(_run_chat(prompt, temporary, new_session, compact))
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        _shutdown_pending_tasks(loop)
         console = Console()
         console.print()
         raise SystemExit(130)
+    finally:
+        loop.close()
+
+
+def _shutdown_pending_tasks(loop: asyncio.AbstractEventLoop) -> None:
+    pending = {t for t in asyncio.all_tasks(loop) if not t.done()}
+    if not pending:
+        return
+
+    for t in pending:
+        t.cancel()
+
+    async def _wait() -> None:
+        await asyncio.gather(*pending, return_exceptions=True)
+
+    with suppress(asyncio.CancelledError, KeyboardInterrupt):
+        loop.run_until_complete(_wait())
+
+    for t in pending:
+        if t.done() and not t.cancelled():
+            with suppress(BaseException):
+                t.exception()
+        else:
+            # Suppress asyncio "Task was destroyed but it is pending!" warning
+            # for cancelled tasks that may be GC'd before they fully finish.
+            t._log_destroy_pending = False  # type: ignore[attr-defined]
 
 
 async def _run_chat(prompt: str, temporary: bool, new_session: bool, compact: bool) -> None:
@@ -94,28 +124,31 @@ async def _run_chat(prompt: str, temporary: bool, new_session: bool, compact: bo
         return
 
     display.show_waiting()
-    async with chat_usecase.run(RunChatInput(session_id=session.id, prompt=prompt)) as response:
-        async for event in response.events():
-            match event:
-                case EmitLLMSignal(signal={"type": "thinking_delta", "delta": delta}):
-                    display.append_thinking_delta(delta)
-                case EmitLLMSignal(signal={"type": "thinking_part_done", "text": text}):
-                    display.set_thinking_text(text)
-                case EmitLLMSignal(signal={"type": "text_delta", "delta": delta}):
-                    display.append_text_delta(delta)
-                case EmitLLMMessage(message=message):
-                    display.commit_message(message)
-                    if message["role"] == "assistant":
-                        for record in message["tool_calls"]:
-                            display.add_pending_tool_call(record)
-                case EmitToolResult(message=message, status=status, view=markdown):
-                    display.finish_tool_call(message, status, markdown)
-                    if not display.has_pending_tool_calls:
-                        display.show_waiting()
-                case WorkflowNodeStartedEvent(node_name="maybe_compact"):
-                    display.show_compacting()
-                case WorkflowNodeFinishedEvent(node_name="maybe_compact"):
-                    display.hide_compacting()
-    display.done()
-
-    await response.collect()
+    try:
+        async with chat_usecase.run(RunChatInput(session_id=session.id, prompt=prompt)) as response:
+            async for event in response.events():
+                match event:
+                    case EmitLLMSignal(signal={"type": "thinking_delta", "delta": delta}):
+                        display.append_thinking_delta(delta)
+                    case EmitLLMSignal(signal={"type": "thinking_part_done", "text": text}):
+                        display.set_thinking_text(text)
+                    case EmitLLMSignal(signal={"type": "text_delta", "delta": delta}):
+                        display.append_text_delta(delta)
+                    case EmitLLMMessage(message=message):
+                        display.commit_message(message)
+                        if message["role"] == "assistant":
+                            for record in message["tool_calls"]:
+                                display.add_pending_tool_call(record)
+                    case EmitToolResult(message=message, status=status, view=markdown):
+                        display.finish_tool_call(message, status, markdown)
+                        if not display.has_pending_tool_calls:
+                            display.show_waiting()
+                    case WorkflowNodeStartedEvent(node_name="maybe_compact"):
+                        display.show_compacting()
+                    case WorkflowNodeFinishedEvent(node_name="maybe_compact"):
+                        display.hide_compacting()
+        display.done()
+        await response.collect()
+    except KeyboardInterrupt:
+        display.done()
+        raise

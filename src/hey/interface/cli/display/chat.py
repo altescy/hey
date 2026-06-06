@@ -204,7 +204,10 @@ class ChatDisplay:
 
         t = threading.Thread(target=_read, daemon=True)
         t.start()
-        return await future
+        try:
+            return await future
+        except asyncio.CancelledError:
+            raise KeyboardInterrupt from None
 
     async def ask_permission(self, record: ToolCallRecord) -> Literal["allow", "deny"]:
         self.done()

@@ -251,6 +251,8 @@ async def interpret_llm_cmds(
                 if not task.done() or task.cancelled():
                     continue
                 with suppress(BaseException):
+                    task.exception()  # Mark exception as retrieved
+                with suppress(BaseException):
                     result = task.result()
                     completed_by_id[result.message["tool_call_id"]] = result
 
@@ -279,7 +281,10 @@ async def interpret_llm_cmds(
 
             raise ToolExecutionInterrupted(events=tuple(interrupted_events), cause=cause) from cause
     finally:
-        _LLM_STATE.reset(token)
+        try:
+            _LLM_STATE.reset(token)
+        except ValueError:
+            pass
 
     return [task.result() for task in tasks]
 
