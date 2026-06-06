@@ -59,8 +59,9 @@ class ChatDisplay:
 
     def _stop_live(self) -> None:
         if self._live is not None:
-            self._live.stop()
+            live = self._live
             self._live = None
+            live.stop()
 
     def _update_live(self, renderable: RenderableType) -> None:
         if self._live is not None:
@@ -170,7 +171,7 @@ class ChatDisplay:
         if record is not None:
             self._print(f"{tool_call_status_icon(status)} {render_tool_call(record)}", _BlockType.TOOL_RESULT)
             if markdown:
-                self._print(Markdown(markdown), _BlockType.TEXT)
+                self._print(Markdown(markdown), _BlockType.TOOL_RESULT)
             else:
                 self._print(
                     f"  [dim]╰─ {render_llm_message(result, width=get_console_width(self._console) - 6)}[/dim]",
@@ -178,8 +179,12 @@ class ChatDisplay:
                 )
 
     def done(self) -> None:
-        self._stop_live()
-        self._phase = _Phase.IDLE
+        try:
+            self._stop_live()
+            self._finish_thinking()
+        finally:
+            self._phase = _Phase.IDLE
+            self._console.show_cursor(True)
 
     async def _ainput(self, prompt: str, stream: TextIO) -> str | None:
         """Read a line from *stream* in a daemon thread so the event loop is not blocked.

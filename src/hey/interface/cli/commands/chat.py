@@ -58,6 +58,7 @@ def run(args: argparse.Namespace) -> None:
     except (KeyboardInterrupt, asyncio.CancelledError):
         _shutdown_pending_tasks(loop)
         console = Console()
+        console.show_cursor(True)
         console.print()
         raise SystemExit(130)
     finally:
@@ -114,17 +115,17 @@ async def _run_chat(prompt: str, temporary: bool, new_session: bool, compact: bo
     if is_new and not temporary:
         display.show_session_start(str(session.id))
 
-    if compact:
-        with console.status("[dim]Compacting session...[/dim]", spinner="dots"):
-            output = await chat_usecase.compact(CompactChatInput(session_id=session.id))
-        if output["compacted"]:
-            console.print("[dim]Session compacted.[/dim]")
-        else:
-            console.print("[dim]Nothing to compact.[/dim]")
-        return
-
-    display.show_waiting()
     try:
+        if compact:
+            with console.status("[dim]Compacting session...[/dim]", spinner="dots"):
+                output = await chat_usecase.compact(CompactChatInput(session_id=session.id))
+            if output["compacted"]:
+                console.print("[dim]Session compacted.[/dim]")
+            else:
+                console.print("[dim]Nothing to compact.[/dim]")
+            return
+
+        display.show_waiting()
         async with chat_usecase.run(RunChatInput(session_id=session.id, prompt=prompt)) as response:
             async for event in response.events():
                 match event:
@@ -147,8 +148,6 @@ async def _run_chat(prompt: str, temporary: bool, new_session: bool, compact: bo
                         display.show_compacting()
                     case WorkflowNodeFinishedEvent(node_name="maybe_compact"):
                         display.hide_compacting()
-        display.done()
         await response.collect()
-    except KeyboardInterrupt:
+    finally:
         display.done()
-        raise
