@@ -68,14 +68,26 @@ def _message_to_input_item(message: LLMMessage) -> list[dict[str, Any]]:
     """
     match message["role"]:
         case "system":
-            return [{"role": "system", "content": "".join(p["text"] for p in message["parts"])}]
+            return [{"type": "message", "role": "system", "content": "".join(p["text"] for p in message["parts"])}]
         case "user":
-            return [{"role": "user", "content": "".join(p["text"] for p in message["parts"])}]
+            return [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "".join(p["text"] for p in message["parts"])}],
+                }
+            ]
         case "assistant":
             items: list[dict[str, Any]] = []
             text = "".join(p["text"] for p in message["parts"])
             if text:
-                items.append({"role": "assistant", "content": text})
+                items.append(
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": text}],
+                    }
+                )
             for record in message.get("tool_calls") or ():
                 items.append(
                     {
@@ -96,6 +108,49 @@ def _message_to_input_item(message: LLMMessage) -> list[dict[str, Any]]:
             ]
         case _:
             raise ValueError(f"Unknown message role: {message['role']}")
+
+
+async def _raise_for_codex_status(resp: Any) -> None:
+    if resp.status_code == 403:
+        raise PermissionError(
+            "Codex: 403 Forbidden — access was denied by the Codex endpoint. "
+            "Your ChatGPT subscription may not include Codex access, or your "
+            "token may need to be refreshed (re-authenticate to get a new one)."
+        )
+
+    if resp.status_code < 400:
+        return
+
+    import httpx
+
+    body = (await resp.aread()).decode("utf-8", errors="replace").strip()
+    message = f"Codex: HTTP {resp.status_code} {resp.reason_phrase}"
+    if body:
+        message = f"{message}: {body[:2000]}"
+    raise httpx.HTTPStatusError(message, request=resp.request, response=resp)
+
+
+def _build_request_body(model: str, query: "CodexQuery") -> dict[str, Any]:
+    input_items: list[dict[str, Any]] = []
+    for message in query.history:
+        input_items.extend(_message_to_input_item(message))
+
+    tools = [_tool_to_responses(t) for t in query.tools]
+    if query.finalizer:
+        tools.append(_tool_to_responses(query.finalizer))
+
+    body: dict[str, Any] = {
+        "model": model,
+        "input": input_items,
+        "stream": True,
+        "store": False,
+        # Do not set max_output_tokens — matches Codex CLI behaviour.
+    }
+    if query.system:
+        body["instructions"] = query.system
+    if tools:
+        body["tools"] = tools
+    return body
 
 
 # ---------------------------------------------------------------------------
@@ -124,26 +179,7 @@ class CodexEngine(Engine[CodexQuery, LLMSignal]):
 
         token = await self._auth.get_token()
         account_id = await self._auth.get_account_id()
-
-        # Build the ``input`` array (Responses API format)
-        input_items: list[dict[str, Any]] = []
-        for message in query.history:
-            input_items.extend(_message_to_input_item(message))
-
-        tools = [_tool_to_responses(t) for t in query.tools]
-        if query.finalizer:
-            tools.append(_tool_to_responses(query.finalizer))
-
-        body: dict[str, Any] = {
-            "model": self._model,
-            "input": input_items,
-            "stream": True,
-            # Do not set max_output_tokens — matches Codex CLI behaviour.
-        }
-        if query.system:
-            body["instructions"] = query.system
-        if tools:
-            body["tools"] = tools
+        body = _build_request_body(self._model, query)
 
         session_id = str(uuid.uuid4())
         headers: dict[str, str] = {
@@ -182,13 +218,7 @@ class CodexEngine(Engine[CodexQuery, LLMSignal]):
 
             async with httpx.AsyncClient(timeout=180) as client:
                 async with client.stream("POST", CODEX_API_URL, json=body, headers=headers) as resp:
-                    if resp.status_code == 403:
-                        raise PermissionError(
-                            "Codex: 403 Forbidden — access was denied by the Codex endpoint. "
-                            "Your ChatGPT subscription may not include Codex access, or your "
-                            "token may need to be refreshed (re-authenticate to get a new one)."
-                        )
-                    resp.raise_for_status()
+                    await _raise_for_codex_status(resp)
                     async for raw_line in resp.aiter_lines():
                         line = raw_line.strip()
                         if not line or not line.startswith("data:"):
