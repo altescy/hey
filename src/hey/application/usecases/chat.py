@@ -289,19 +289,25 @@ def _filter_chat_workflow_events[ResponseT](
                 await source.aclose()
 
         forward_task = asyncio.create_task(forward_events())
+        generator_exit = False
         try:
             result = await response.collect()
             await forward_task
             return result
-        except BaseException:
+        except BaseException as exc:
+            generator_exit = isinstance(exc, GeneratorExit)
             if not forward_task.done():
                 forward_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await forward_task
+                if not generator_exit:
+                    with suppress(asyncio.CancelledError):
+                        await forward_task
             raise
         finally:
             if not source._closed:  # type: ignore[attr-defined]
-                await source.aclose()
+                if generator_exit:
+                    source._closed = True  # type: ignore[attr-defined]
+                else:
+                    await source.aclose()
 
     return WorkflowResponse(source, run)
 

@@ -50,6 +50,9 @@ class WorkflowExecutor[StateT, EventT, TerminalT]:
         async def _ro() -> tuple[StateT, TerminalT]:
             try:
                 return await self._run(graph, state, source, execution)
+            except GeneratorExit:
+                source._closed = True  # type: ignore[attr-defined]
+                raise
             except BaseException as exc:
                 execution.skipped_nodes = max(0, execution.total_nodes - execution.completed_nodes)
                 await source.publish(
