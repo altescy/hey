@@ -56,13 +56,22 @@ def run(args: argparse.Namespace) -> None:
         asyncio.set_event_loop(loop)
         loop.run_until_complete(_run_chat(prompt, temporary, new_session, compact))
     except (KeyboardInterrupt, asyncio.CancelledError):
-        _shutdown_pending_tasks(loop)
         console = Console()
         console.show_cursor(True)
         console.print()
         raise SystemExit(130)
     finally:
+        _shutdown_loop(loop)
+        asyncio.set_event_loop(None)
         loop.close()
+
+
+def _shutdown_loop(loop: asyncio.AbstractEventLoop) -> None:
+    _shutdown_pending_tasks(loop)
+    with suppress(asyncio.CancelledError, KeyboardInterrupt):
+        loop.run_until_complete(loop.shutdown_asyncgens())
+    with suppress(asyncio.CancelledError, KeyboardInterrupt):
+        loop.run_until_complete(loop.shutdown_default_executor())
 
 
 def _shutdown_pending_tasks(loop: asyncio.AbstractEventLoop) -> None:
