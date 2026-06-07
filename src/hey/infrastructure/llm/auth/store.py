@@ -1,26 +1,25 @@
 """Token persistence helpers shared by Copilot and Codex auth providers.
 
-Tokens are stored as JSON files under ``~/.config/hey/auth/<provider>.json``
-(XDG_CONFIG_HOME is respected when set).
+Tokens are stored as JSON files under the platform-appropriate global auth
+ directory (e.g. ``~/.config/hey/auth/<provider>.json`` on Linux).
 """
 
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any
 
+from hey.infrastructure.paths import global_auth_dir
 
-def _config_dir() -> Path:
-    xdg = os.environ.get("XDG_CONFIG_HOME")
-    base = Path(xdg) if xdg else Path.home() / ".config"
-    return base / "hey" / "auth"
+
+def _token_path(provider: str) -> Path:
+    return global_auth_dir() / f"{provider}.json"
 
 
 def load_token(provider: str) -> dict[str, Any] | None:
     """Return the stored token dict for *provider*, or ``None`` if absent."""
-    path = _config_dir() / f"{provider}.json"
+    path = _token_path(provider)
     if not path.is_file():
         return None
     try:
@@ -31,9 +30,7 @@ def load_token(provider: str) -> dict[str, Any] | None:
 
 def save_token(provider: str, data: dict[str, Any]) -> None:
     """Persist *data* for *provider* atomically."""
-    dir_ = _config_dir()
-    dir_.mkdir(parents=True, exist_ok=True)
-    path = dir_ / f"{provider}.json"
+    path = _token_path(provider)
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(data))
     tmp.replace(path)
@@ -41,5 +38,4 @@ def save_token(provider: str, data: dict[str, Any]) -> None:
 
 def delete_token(provider: str) -> None:
     """Remove stored credentials for *provider* (no-op if absent)."""
-    path = _config_dir() / f"{provider}.json"
-    path.unlink(missing_ok=True)
+    _token_path(provider).unlink(missing_ok=True)

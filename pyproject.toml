@@ -12,6 +12,7 @@ dependencies = [
     "pydantic-settings>=2.14.0",
     "rich>=14.3.4",
     "httpx>=0.28.0",
+    "platformdirs>=4.0",
 ]
 
 [project.scripts]

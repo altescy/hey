@@ -4,18 +4,19 @@ Mirrors the behaviour of OpenCode's ``Instruction.Service``:
 
 1. Walk upward from the current directory to the project root looking for
    ``AGENTS.md``.  The first match wins (ancestors are not stacked).
-2. Fall back to a global file at ``~/.config/hey/AGENTS.md``.
+2. Fall back to a global file (platform-appropriate location, e.g.
+   ``~/.config/hey/AGENTS.md`` on Linux).
 3. Contents are formatted as ``Instructions from: <path>\n<content>`` and
    concatenated.
 """
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
+from hey.domain.services.paths import global_agents_md_path
+
 AGENTS_MD_FILENAME: str = "AGENTS.md"
-GLOBAL_CONFIG_DIR: str = os.path.join(os.path.expanduser("~"), ".config", "hey")
 
 
 def _find_up(start: Path, root: Path, filename: str) -> Path | None:
@@ -38,8 +39,8 @@ def find_project_agents_md(project_directory: Path) -> Path | None:
 
 
 def find_global_agents_md() -> Path | None:
-    """Return the path to the global ``~/.config/hey/AGENTS.md`` if it exists."""
-    candidate = Path(GLOBAL_CONFIG_DIR) / AGENTS_MD_FILENAME
+    """Return the path to the global AGENTS.md if it exists."""
+    candidate = global_agents_md_path()
     return candidate if candidate.is_file() else None
 
 
