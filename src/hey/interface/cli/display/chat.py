@@ -9,6 +9,7 @@ from rich.live import Live
 from rich.markdown import Markdown
 from rich.rule import Rule
 from rich.spinner import Spinner
+from rich.text import Text
 
 from hey.core.markdown import MarkdownBuffer, reduce_markdown
 from hey.domain.entities.llm import LLMMessage, ToolCallRecord, ToolResultMessage
@@ -77,6 +78,19 @@ class ChatDisplay:
         self._apply_spacing(block_type)
         self._console.print(renderable)
 
+    def _tool_calls_renderable(self) -> RenderableType:
+        rows = [
+            Columns(
+                [
+                    Spinner("dots"),
+                    Text.from_markup(render_tool_call(record, width=get_console_width(self._console) - 6)),
+                ],
+                padding=(0, 1),
+            )
+            for record in self._tool_calls.values()
+        ]
+        return Group(*rows) if rows else Group()
+
     def _streaming_renderable(self) -> RenderableType:
         pending = self._md_buffer.text if self._md_buffer else ""
         if pending:
@@ -126,7 +140,7 @@ class ChatDisplay:
         writer.write(delta)
 
     def set_thinking_text(self, text: str) -> None:
-        pass
+        self._apply_spacing(_BlockType.THINKING)
 
     def append_text_delta(self, delta: str) -> None:
         if self._phase != _Phase.STREAMING:
@@ -157,6 +171,11 @@ class ChatDisplay:
 
     def add_pending_tool_call(self, record: ToolCallRecord) -> None:
         self._tool_calls[record["id"]] = record
+        renderable = self._tool_calls_renderable()
+        if self._live is not None:
+            self._update_live(renderable)
+        else:
+            self._start_live(renderable)
 
     def finish_tool_call(
         self,
@@ -177,6 +196,9 @@ class ChatDisplay:
                     f"  [dim]╰─ {render_llm_message(result, width=get_console_width(self._console) - 6)}[/dim]",
                     _BlockType.TOOL_RESULT,
                 )
+
+        if self._tool_calls:
+            self._start_live(self._tool_calls_renderable())
 
     def done(self) -> None:
         try:
@@ -216,6 +238,7 @@ class ChatDisplay:
 
     async def ask_permission(self, record: ToolCallRecord) -> Literal["allow", "deny"]:
         self.done()
+        decision: Literal["allow", "deny"] = "deny"
         async with self._permission_lock:
             self._apply_spacing(_BlockType.PERMISSION)
             tty_in = self._get_tty_in()
@@ -231,9 +254,14 @@ class ChatDisplay:
                 )
                 if answer is None:
                     # EOF (e.g. Ctrl+D) – treat as deny.
-                    return "deny"
+                    break
                 match answer.strip().lower():
                     case "y":
-                        return "allow"
+                        decision = "allow"
+                        break
                     case "n":
-                        return "deny"
+                        break
+        if self._tool_calls:
+            self._apply_spacing(_BlockType.TOOL_RESULT)
+            self._start_live(self._tool_calls_renderable())
+        return decision
