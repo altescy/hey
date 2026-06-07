@@ -42,6 +42,7 @@ class ChatDisplay:
         self._tool_calls: dict[str, ToolCallRecord] = {}
         self._previous_block_type: _BlockType | None = None
         self._permission_lock = asyncio.Lock()
+        self._asking_permission: set[str] = set()
 
     @property
     def has_pending_tool_calls(self) -> bool:
@@ -88,6 +89,7 @@ class ChatDisplay:
                 padding=(0, 1),
             )
             for record in self._tool_calls.values()
+            if record["id"] not in self._asking_permission
         ]
         return Group(*rows) if rows else Group()
 
@@ -197,7 +199,7 @@ class ChatDisplay:
                     _BlockType.TOOL_RESULT,
                 )
 
-        if self._tool_calls:
+        if self._tool_calls and not self._asking_permission:
             self._start_live(self._tool_calls_renderable())
 
     def done(self) -> None:
@@ -238,6 +240,7 @@ class ChatDisplay:
 
     async def ask_permission(self, record: ToolCallRecord) -> Literal["allow", "deny"]:
         self.done()
+        self._asking_permission.add(record["id"])
         decision: Literal["allow", "deny"] = "deny"
         async with self._permission_lock:
             self._apply_spacing(_BlockType.PERMISSION)
@@ -261,7 +264,5 @@ class ChatDisplay:
                         break
                     case "n":
                         break
-        if self._tool_calls:
-            self._apply_spacing(_BlockType.TOOL_RESULT)
-            self._start_live(self._tool_calls_renderable())
+        self._asking_permission.discard(record["id"])
         return decision
