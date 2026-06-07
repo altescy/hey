@@ -92,76 +92,81 @@ async def parse_chat_stream(
     finish_reason: FinishReason = "stop"
     usage: Usage = {}
 
-    async for raw_line in line_iter:
-        line = raw_line.strip()
-        if not line or not line.startswith("data:"):
-            continue
-        payload = line[len("data:") :].strip()
-        if payload == "[DONE]":
-            break
+    try:
+        async for raw_line in line_iter:
+            line = raw_line.strip()
+            if not line or not line.startswith("data:"):
+                continue
+            payload = line[len("data:") :].strip()
+            if payload == "[DONE]":
+                break
 
-        chunk = json.loads(payload)
+            chunk = json.loads(payload)
 
-        if u := chunk.get("usage"):
-            if pt := u.get("prompt_tokens"):
-                usage["input_tokens"] = pt
-            if ct := u.get("completion_tokens"):
-                usage["output_tokens"] = ct
-            if rd := (u.get("completion_tokens_details") or {}).get("reasoning_tokens"):
-                usage["reasoning_tokens"] = rd
+            if u := chunk.get("usage"):
+                if pt := u.get("prompt_tokens"):
+                    usage["input_tokens"] = pt
+                if ct := u.get("completion_tokens"):
+                    usage["output_tokens"] = ct
+                if rd := (u.get("completion_tokens_details") or {}).get("reasoning_tokens"):
+                    usage["reasoning_tokens"] = rd
 
-        choices = chunk.get("choices") or []
-        if not choices:
-            continue
-        choice = choices[0]
-        delta = choice.get("delta") or {}
+            choices = chunk.get("choices") or []
+            if not choices:
+                continue
+            choice = choices[0]
+            delta = choice.get("delta") or {}
 
-        thinking_text: str | None = delta.get("reasoning_text") or delta.get("reasoning_content")
-        if thinking_text:
-            if not thinking_part_open:
-                thinking_part_open = True
-                thinking_part_index = 0
-                text_part_index = 1
-                tc_part_index_base = 2
-                yield ThinkingPartStarted(type="thinking_part_started", index=thinking_part_index)
-            thinking_buf += thinking_text
-            yield ThinkingDelta(type="thinking_delta", index=thinking_part_index, delta=thinking_text)
+            thinking_text: str | None = delta.get("reasoning_text") or delta.get("reasoning_content")
+            if thinking_text:
+                if not thinking_part_open:
+                    thinking_part_open = True
+                    thinking_part_index = 0
+                    text_part_index = 1
+                    tc_part_index_base = 2
+                    yield ThinkingPartStarted(type="thinking_part_started", index=thinking_part_index)
+                thinking_buf += thinking_text
+                yield ThinkingDelta(type="thinking_delta", index=thinking_part_index, delta=thinking_text)
 
-        if content := delta.get("content"):
-            if not text_part_open:
-                text_part_open = True
-                yield TextPartStarted(type="text_part_started", index=text_part_index)
-            text_buf += content
-            yield TextDelta(type="text_delta", index=text_part_index, delta=content)
+            if content := delta.get("content"):
+                if not text_part_open:
+                    text_part_open = True
+                    yield TextPartStarted(type="text_part_started", index=text_part_index)
+                text_buf += content
+                yield TextDelta(type="text_delta", index=text_part_index, delta=content)
 
-        for tc in delta.get("tool_calls") or []:
-            idx: int = tc["index"]
-            part_index = tc_part_index_base + idx
-            if idx not in tc_parts:
-                tc_id = tc.get("id") or ""
-                tc_name = (tc.get("function") or {}).get("name") or ""
-                tc_parts[idx] = _PartialTC(tool_call_id=tc_id, tool_name=tc_name, args_buf="")
-                yield ToolCallPartStarted(
-                    type="tool_call_part_started",
-                    index=part_index,
-                    tool_call_id=tc_id,
-                    tool_name=tc_name,
-                )
-            else:
-                part = tc_parts[idx]
-                if tc.get("id") and not part.tool_call_id:
-                    part.tool_call_id = tc["id"]
-                fn = tc.get("function") or {}
-                if fn.get("name") and not part.tool_name:
-                    part.tool_name = fn["name"]
+            for tc in delta.get("tool_calls") or []:
+                idx: int = tc["index"]
+                part_index = tc_part_index_base + idx
+                if idx not in tc_parts:
+                    tc_id = tc.get("id") or ""
+                    tc_name = (tc.get("function") or {}).get("name") or ""
+                    tc_parts[idx] = _PartialTC(tool_call_id=tc_id, tool_name=tc_name, args_buf="")
+                    yield ToolCallPartStarted(
+                        type="tool_call_part_started",
+                        index=part_index,
+                        tool_call_id=tc_id,
+                        tool_name=tc_name,
+                    )
+                else:
+                    part = tc_parts[idx]
+                    if tc.get("id") and not part.tool_call_id:
+                        part.tool_call_id = tc["id"]
+                    fn = tc.get("function") or {}
+                    if fn.get("name") and not part.tool_name:
+                        part.tool_name = fn["name"]
 
-            args_frag = (tc.get("function") or {}).get("arguments") or ""
-            if args_frag:
-                tc_parts[idx].args_buf += args_frag
-                yield ToolCallArgsDelta(type="tool_call_args_delta", index=part_index, delta=args_frag)
+                args_frag = (tc.get("function") or {}).get("arguments") or ""
+                if args_frag:
+                    tc_parts[idx].args_buf += args_frag
+                    yield ToolCallArgsDelta(type="tool_call_args_delta", index=part_index, delta=args_frag)
 
-        if choice.get("finish_reason") in ("stop", "tool_calls", "length", "content_filter"):
-            finish_reason = choice["finish_reason"]
+            if choice.get("finish_reason") in ("stop", "tool_calls", "length", "content_filter"):
+                finish_reason = choice["finish_reason"]
+    finally:
+        aclose = getattr(line_iter, "aclose", None)
+        if aclose is not None:
+            await aclose()
 
     if thinking_part_open:
         yield ThinkingPartDone(type="thinking_part_done", index=thinking_part_index, text=thinking_buf)
