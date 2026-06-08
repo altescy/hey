@@ -98,6 +98,8 @@ class LiteLLMEngine(Engine[LiteLLMQuery, LLMSignal]):
     async def __call__(self, query: LiteLLMQuery) -> AsyncIterator[AsyncIterator[LLMSignal]]:
         import litellm
 
+        setattr(litellm, "suppress_debug_info", True)
+
         async def _stream() -> AsyncIterator[LLMSignal]:
             @dataclasses.dataclass
             class _PartialTC:
