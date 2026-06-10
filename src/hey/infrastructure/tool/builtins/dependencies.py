@@ -1,4 +1,5 @@
 import dataclasses
+from pathlib import Path
 
 from hey.domain.entities.project import ProjectID
 from hey.domain.entities.sandbox import PermissionProfile
@@ -10,5 +11,6 @@ from hey.infrastructure.sandbox.protocol import SandboxRunner
 class ToolDependencies:
     chat_repository: IChatRepository
     project_id: ProjectID
+    project_directory: Path
     sandbox_runner: SandboxRunner
     permission_profile: PermissionProfile

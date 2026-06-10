@@ -2,6 +2,8 @@ from pathlib import Path
 
 from hey.domain.entities.tool import ToolSpec
 from hey.domain.services.tool import generate_tool_spec_from_callable
+from hey.infrastructure.tool.builtins.dependencies import ToolDependencies
+from hey.infrastructure.tool.builtins.path_guard import assert_path_access, resolve_tool_path
 
 _DESCRIPTION = """\
 Find files whose paths match a glob pattern, sorted by modification time (newest first).
@@ -27,10 +29,13 @@ def is_available() -> bool:
     return True
 
 
-def create_tool_spec() -> ToolSpec:
+def create_tool_spec(dependencies: ToolDependencies | None = None) -> ToolSpec:
     async def glob(pattern: str, path: str | None = None) -> str:
         """Find files matching a glob pattern, sorted by modification time."""
-        root = Path(path).resolve() if path else Path.cwd()
+        project_directory = dependencies.project_directory if dependencies is not None else Path.cwd()
+        root = resolve_tool_path(path, project_directory=project_directory)
+        if dependencies is not None:
+            assert_path_access(root, profile=dependencies.permission_profile, access="read")
         if not root.exists():
             raise FileNotFoundError(f"Path not found: {root}")
         if not root.is_dir():

@@ -151,6 +151,7 @@ def build_tool_dependencies(
     return ToolDependencies(
         chat_repository=chat_repository,
         project_id=project_id,
+        project_directory=project_directory,
         sandbox_runner=build_sandbox_runner(permission_profile),
         permission_profile=permission_profile,
     )
