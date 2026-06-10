@@ -37,7 +37,12 @@ class Container:
         project = project_usecase.get_project(GetProjectInput(path=project_directory))["project"]
 
         chat_repository = build_chat_repository(project.directory, temporary=temporary)
-        tool_dependencies = build_tool_dependencies(project.id, chat_repository)
+        tool_dependencies = build_tool_dependencies(
+            project.id,
+            chat_repository,
+            config=project.config.chat,
+            project_directory=project.directory,
+        )
         tool_repository = build_tool_repository(project.config.chat, tool_dependencies)
         agent_spec = build_agent_spec(
             project.config.chat,

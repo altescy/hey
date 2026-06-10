@@ -16,7 +16,6 @@ from hey.infrastructure.tool.builtins.dependencies import ToolDependencies
 # Each entry pairs an availability check with the corresponding factory.
 # Tools whose is_available() returns False are silently skipped at startup.
 _BUILTIN_TOOL_ENTRIES = [
-    (bash.is_available, bash.create_tool_spec),
     (edit.is_available, edit.create_tool_spec),
     (glob.is_available, glob.create_tool_spec),
     (grep.is_available, grep.create_tool_spec),
@@ -30,6 +29,13 @@ _BUILTIN_TOOL_ENTRIES = [
 class BuiltinToolRepository(IToolRepository):
     def __init__(self, dependencies: ToolDependencies) -> None:
         tools = [create_spec() for is_available, create_spec in _BUILTIN_TOOL_ENTRIES if is_available()]
+        if bash.is_available():
+            tools.append(
+                bash.create_tool_spec(
+                    sandbox_runner=dependencies.sandbox_runner,
+                    permission_profile=dependencies.permission_profile,
+                )
+            )
         if search_chat_messages.is_available():
             tools.append(search_chat_messages.create_tool_spec(dependencies))
         self._tools = {tool.name: tool for tool in tools}

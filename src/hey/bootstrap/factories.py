@@ -14,9 +14,11 @@ from hey.domain.repositories.chat import IChatRepository
 from hey.domain.repositories.tool import IToolRepository
 from hey.domain.services.agentsmd import build_agents_instructions
 from hey.domain.services.project import get_hey_dot_directory
+from hey.domain.services.sandbox import build_workspace_permission_profile
 from hey.infrastructure.repositories.chat import InMemoryChatRepository, SQLiteChatRepository
 from hey.infrastructure.repositories.project import LocalProjectRepository
 from hey.infrastructure.repositories.tool import BuiltinToolRepository, CompositeToolRepository, MCPToolRepository
+from hey.infrastructure.sandbox import build_sandbox_runner
 from hey.infrastructure.tool.builtins.dependencies import ToolDependencies
 
 from .constants import (
@@ -132,8 +134,26 @@ def build_chat_repository(
     return SQLiteChatRepository(get_hey_dot_directory(project_directory) / HEY_DB_FILENAME)
 
 
-def build_tool_dependencies(project_id: ProjectID, chat_repository: IChatRepository) -> ToolDependencies:
-    return ToolDependencies(chat_repository=chat_repository, project_id=project_id)
+def build_tool_dependencies(
+    project_id: ProjectID,
+    chat_repository: IChatRepository,
+    *,
+    config: ChatConfig,
+    project_directory: Path,
+) -> ToolDependencies:
+    enforcement = config.sandbox.enforcement if config.sandbox.enabled else "disabled"
+    permission_profile = build_workspace_permission_profile(
+        project_directory,
+        mode=config.sandbox.filesystem,
+        network=config.sandbox.network,
+        enforcement=enforcement,
+    )
+    return ToolDependencies(
+        chat_repository=chat_repository,
+        project_id=project_id,
+        sandbox_runner=build_sandbox_runner(permission_profile),
+        permission_profile=permission_profile,
+    )
 
 
 def build_tool_repository(config: ChatConfig, dependencies: ToolDependencies) -> IToolRepository:
