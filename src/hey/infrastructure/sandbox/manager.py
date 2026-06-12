@@ -3,10 +3,9 @@ from __future__ import annotations
 import platform
 
 from hey.domain.entities.sandbox import PermissionProfile
+from hey.domain.exceptions.sandbox import SandboxUnavailableError
 from hey.domain.services.sandbox import ISandboxRunner
-from hey.infrastructure.sandbox.exceptions import SandboxUnavailableError
-from hey.infrastructure.sandbox.macos import MacOSSandboxRunner
-from hey.infrastructure.sandbox.noop import NoopSandboxRunner
+from hey.infrastructure.sandbox.runners import MacOSSandboxRunner, NoopSandboxRunner
 
 
 def build_sandbox_runner(profile: PermissionProfile) -> ISandboxRunner:

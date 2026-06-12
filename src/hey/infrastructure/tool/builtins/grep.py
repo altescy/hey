@@ -3,10 +3,10 @@ import re
 from pathlib import Path
 
 from hey.domain.entities.tool import ToolSpec
+from hey.domain.services.sandbox import assert_path_access, resolve_tool_path
 from hey.domain.services.tool import generate_tool_spec_from_callable
 
 from ..dependencies import ToolDependencies
-from ..path_guard import assert_path_access, resolve_tool_path
 
 _DESCRIPTION = """\
 Search file contents using a regular expression, returning matching file paths \

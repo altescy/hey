@@ -47,8 +47,8 @@ from hey.domain.entities.llm import (
     Usage,
 )
 
+from ..auth.copilot import CopilotAuthProvider
 from ._openai_chat import message_to_chat, parse_chat_stream, tool_to_chat
-from .auth.copilot import CopilotAuthProvider
 
 # process-level cache: model_id -> set of supported endpoint strings
 _MODEL_ENDPOINTS_CACHE: dict[str, set[str]] = {}

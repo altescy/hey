@@ -1,7 +1,7 @@
-from hey.infrastructure.llm.codex import _MODEL_LIMITS as CODEX_LIMITS
-from hey.infrastructure.llm.copilot import _MODEL_LIMITS as COPILOT_LIMITS
-from hey.infrastructure.llm.litellm import _resolve_litellm_limits
-from hey.infrastructure.llm.opencode import _MODEL_LIMITS as OPENCODE_LIMITS
+from hey.infrastructure.llm.specs.codex import _MODEL_LIMITS as CODEX_LIMITS
+from hey.infrastructure.llm.specs.copilot import _MODEL_LIMITS as COPILOT_LIMITS
+from hey.infrastructure.llm.specs.litellm import _resolve_litellm_limits
+from hey.infrastructure.llm.specs.opencode import _MODEL_LIMITS as OPENCODE_LIMITS
 
 
 def test_codex_default_model_has_limits() -> None:

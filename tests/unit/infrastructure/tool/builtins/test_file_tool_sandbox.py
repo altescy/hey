@@ -9,7 +9,7 @@ from hey.domain.entities.project import ProjectID
 from hey.domain.exceptions.tool import ToolCallDenied
 from hey.domain.repositories.chat import IChatRepository
 from hey.domain.services.sandbox import build_workspace_permission_profile
-from hey.infrastructure.sandbox.noop import NoopSandboxRunner
+from hey.infrastructure.sandbox.runners import NoopSandboxRunner
 from hey.infrastructure.tool.builtins import edit, glob, grep, ls, read
 from hey.infrastructure.tool.dependencies import ToolDependencies
 

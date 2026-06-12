@@ -51,17 +51,17 @@ def build_llm_spec(config: ChatConfig, *, project_directory: Path | None = None)
     instructions = _resolve_chat_instructions(config, project_directory=project_directory)
 
     if model.startswith(COPILOT_MODEL_PREFIX):
-        from hey.infrastructure.llm.copilot import get_copilot_spec
+        from hey.infrastructure.llm.specs.copilot import get_copilot_spec
 
         return get_copilot_spec(model=model[len(COPILOT_MODEL_PREFIX) :], instructions=instructions)
 
     if model.startswith(CODEX_MODEL_PREFIX):
-        from hey.infrastructure.llm.codex import get_codex_spec
+        from hey.infrastructure.llm.specs.codex import get_codex_spec
 
         return get_codex_spec(model=model[len(CODEX_MODEL_PREFIX) :], instructions=instructions)
 
     if model.startswith(OPENCODE_GO_MODEL_PREFIX):
-        from hey.infrastructure.llm.opencode import get_opencode_spec
+        from hey.infrastructure.llm.specs.opencode import get_opencode_spec
 
         return get_opencode_spec(
             model=model[len(OPENCODE_GO_MODEL_PREFIX) :],
@@ -70,7 +70,7 @@ def build_llm_spec(config: ChatConfig, *, project_directory: Path | None = None)
         )
 
     if model.startswith(OPENCODE_MODEL_PREFIX):
-        from hey.infrastructure.llm.opencode import get_opencode_spec
+        from hey.infrastructure.llm.specs.opencode import get_opencode_spec
 
         return get_opencode_spec(
             model=model[len(OPENCODE_MODEL_PREFIX) :],
@@ -78,7 +78,7 @@ def build_llm_spec(config: ChatConfig, *, project_directory: Path | None = None)
             instructions=instructions,
         )
 
-    from hey.infrastructure.llm.litellm import get_litellm_spec
+    from hey.infrastructure.llm.specs.litellm import get_litellm_spec
 
     return get_litellm_spec(model=model, instructions=instructions)
 

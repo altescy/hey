@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from hey.domain.entities.sandbox import FileSystemPolicy, FileSystemRule, NetworkPolicy, PermissionProfile
-from hey.infrastructure.sandbox.macos import build_seatbelt_profile
+from hey.infrastructure.sandbox.runners.macos import build_seatbelt_profile
 
 
 def test_build_seatbelt_profile_allows_workspace_write_and_denies_network() -> None:

@@ -8,8 +8,8 @@ import tempfile
 from pathlib import Path
 
 from hey.domain.entities.sandbox import FileSystemRule, PermissionProfile, SandboxExecRequest, SandboxExecResult
+from hey.domain.exceptions.sandbox import SandboxUnavailableError
 from hey.domain.services.sandbox import ISandboxRunner
-from hey.infrastructure.sandbox.exceptions import SandboxUnavailableError
 
 
 def _quote_sbpl(value: str) -> str:

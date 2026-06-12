@@ -7,7 +7,7 @@ from hey.domain.entities.sandbox import PermissionProfile, SandboxExecRequest
 from hey.domain.entities.tool import ToolSpec
 from hey.domain.services.sandbox import ISandboxRunner
 from hey.domain.services.tool import generate_tool_spec_from_callable
-from hey.infrastructure.sandbox.noop import NoopSandboxRunner
+from hey.infrastructure.sandbox.runners import NoopSandboxRunner
 
 _DESCRIPTION = """\
 Execute a shell command and return its combined stdout/stderr output.
