@@ -27,9 +27,7 @@ def build_workspace_permission_profile(
         entries.append(FileSystemRule(path=workspace, access="read"))
     elif mode == "workspace_write":
         entries.append(FileSystemRule(path=workspace, access="write"))
-    elif mode == "unrestricted":
-        pass
-    elif mode != "custom":
+    elif mode != "unrestricted":
         raise ValueError(f"unsupported sandbox filesystem mode: {mode}")
 
     return PermissionProfile(

@@ -39,7 +39,7 @@ class ChatCompactionConfig(BaseModel):
 class SandboxConfig(BaseModel):
     enabled: bool = True
     enforcement: Literal["managed", "external", "disabled"] = "managed"
-    filesystem: Literal["read_only", "workspace_write", "unrestricted", "custom"] = "workspace_write"
+    filesystem: Literal["read_only", "workspace_write", "unrestricted"] = "workspace_write"
     network: Literal["restricted", "enabled", "proxy_only"] = "restricted"
 
 

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Literal
 
 type SandboxEnforcement = Literal["managed", "external", "disabled"]
-type FileSystemMode = Literal["read_only", "workspace_write", "unrestricted", "custom"]
+type FileSystemMode = Literal["read_only", "workspace_write", "unrestricted"]
 type FileAccess = Literal["read", "write", "deny"]
 type NetworkMode = Literal["restricted", "enabled", "proxy_only"]
 type ApprovalPolicy = Literal["never", "on_request", "on_failure", "untrusted"]

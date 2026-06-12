@@ -44,14 +44,6 @@ def _shell_command(command: str) -> list[str]:
     return ["/bin/sh", "-c", command]
 
 
-def _format_result(output: str, exit_code: int, timed_out: bool) -> str:
-    if timed_out:
-        return f"{output}\nCommand timed out."
-    if exit_code == 0:
-        return output
-    return f"{output}\nCommand exited with status {exit_code}."
-
-
 def create_tool_spec(
     sandbox_runner: SandboxRunner | None = None,
     permission_profile: PermissionProfile | None = None,
@@ -73,7 +65,11 @@ def create_tool_spec(
                 timeout_seconds=timeout_seconds,
             )
         )
-        return _format_result(result.output, result.exit_code, result.timed_out)
+        if result.timed_out:
+            raise RuntimeError(f"Command timed out after {timeout_seconds:.0f}s:\n{result.output}")
+        if result.exit_code != 0:
+            raise RuntimeError(f"Command exited with status {result.exit_code}:\n{result.output}")
+        return result.output
 
     async def render_markdown(
         output: str, command: str, workdir: Optional[str] = None, timeout: Optional[int] = None
