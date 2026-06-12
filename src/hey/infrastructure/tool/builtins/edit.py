@@ -5,8 +5,9 @@ from typing import NamedTuple
 from hey.domain.entities.tool import ToolSpec
 from hey.domain.services.file import use_file_time
 from hey.domain.services.tool import generate_tool_spec_from_callable
-from hey.infrastructure.tool.builtins.dependencies import ToolDependencies
-from hey.infrastructure.tool.builtins.path_guard import assert_path_access, resolve_tool_path
+
+from ..dependencies import ToolDependencies
+from ..path_guard import assert_path_access, resolve_tool_path
 
 _DESCRIPTION = """\
 Overwrite a specific substring in a file with new content.
@@ -23,8 +24,7 @@ Usage:
   raises an error. Either broaden the context in `old_string` or set \
   `replace_all=true` to replace every occurrence.
 - If the file has been modified externally since the last read, the tool \
-  raises an error. Re-read the file and retry.
-""".strip()
+  raises an error. Re-read the file and retry."""
 
 
 class _EditResult(NamedTuple):

@@ -2,8 +2,9 @@ from pathlib import Path
 
 from hey.domain.entities.tool import ToolSpec
 from hey.domain.services.tool import generate_tool_spec_from_callable
-from hey.infrastructure.tool.builtins.dependencies import ToolDependencies
-from hey.infrastructure.tool.builtins.path_guard import assert_path_access, resolve_tool_path
+
+from ..dependencies import ToolDependencies
+from ..path_guard import assert_path_access, resolve_tool_path
 
 _DESCRIPTION = """\
 List files and directories under a given path as an indented tree.
@@ -18,8 +19,7 @@ Notes:
   for, and `grep` when you want to find files by content. Use `ls` to get a \
   broad overview of an unfamiliar directory.
 - Results are capped at 200 entries. If the tree is truncated, narrow the \
-  search by passing a more specific `path`.
-""".strip()
+  search by passing a more specific `path`."""
 
 _DEFAULT_IGNORE: frozenset[str] = frozenset(
     [

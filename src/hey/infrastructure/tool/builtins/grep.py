@@ -4,8 +4,9 @@ from pathlib import Path
 
 from hey.domain.entities.tool import ToolSpec
 from hey.domain.services.tool import generate_tool_spec_from_callable
-from hey.infrastructure.tool.builtins.dependencies import ToolDependencies
-from hey.infrastructure.tool.builtins.path_guard import assert_path_access, resolve_tool_path
+
+from ..dependencies import ToolDependencies
+from ..path_guard import assert_path_access, resolve_tool_path
 
 _DESCRIPTION = """\
 Search file contents using a regular expression, returning matching file paths \
@@ -19,8 +20,7 @@ Notes:
   (e.g. `*.py`, `*.{ts,tsx}`).
 - Results are grouped by file and capped at 100 matching lines. \
   If results are truncated, use a more specific pattern, path, or include filter.
-- Only text files are searched; binary files are silently skipped.
-""".strip()
+- Only text files are searched; binary files are silently skipped."""
 
 _LIMIT = 100
 _MAX_LINE_LENGTH = 2000

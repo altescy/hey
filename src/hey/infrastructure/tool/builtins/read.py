@@ -3,8 +3,9 @@ from pathlib import Path
 from hey.domain.entities.tool import ToolSpec
 from hey.domain.services.file import use_file_time
 from hey.domain.services.tool import generate_tool_spec_from_callable
-from hey.infrastructure.tool.builtins.dependencies import ToolDependencies
-from hey.infrastructure.tool.builtins.path_guard import assert_path_access, resolve_tool_path
+
+from ..dependencies import ToolDependencies
+from ..path_guard import assert_path_access, resolve_tool_path
 
 _DEFAULT_LIMIT = 2000
 _MAX_LINE_LENGTH = 2000
@@ -27,8 +28,7 @@ Notes:
   a continuation hint with the next offset is included at the end.
 - Lines longer than {_MAX_LINE_LENGTH} characters are truncated.
 - Binary files are not supported and will produce an error.
-- Use `grep` to search for specific content, or `glob` to locate files by name.
-""".strip()
+- Use `grep` to search for specific content, or `glob` to locate files by name."""
 
 
 def is_available() -> bool:

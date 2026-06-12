@@ -3,7 +3,8 @@ from hey.domain.entities.llm import LLMMessage
 from hey.domain.entities.tool import ToolSpec
 from hey.domain.repositories.chat import ChatMessageRetrievalRequest
 from hey.domain.services.tool import generate_tool_spec_from_callable
-from hey.infrastructure.tool.builtins.dependencies import ToolDependencies
+
+from ..dependencies import ToolDependencies
 
 _DESCRIPTION = """\
 Search stored chat messages in the current project.
@@ -16,8 +17,7 @@ Notes:
   against message text parts.
 - `offset` starts at 0.
 - `limit` defaults to 20 and caps results per call.
-- Returns matching messages with session id, role, timestamp, and text excerpt.
-""".strip()
+- Returns matching messages with session id, role, timestamp, and text excerpt."""
 
 _DEFAULT_LIMIT = 20
 _MAX_LIMIT = 100

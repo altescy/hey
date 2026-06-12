@@ -2,8 +2,9 @@ from pathlib import Path
 
 from hey.domain.entities.tool import ToolSpec
 from hey.domain.services.tool import generate_tool_spec_from_callable
-from hey.infrastructure.tool.builtins.dependencies import ToolDependencies
-from hey.infrastructure.tool.builtins.path_guard import assert_path_access, resolve_tool_path
+
+from ..dependencies import ToolDependencies
+from ..path_guard import assert_path_access, resolve_tool_path
 
 _DESCRIPTION = """\
 Find files whose paths match a glob pattern, sorted by modification time (newest first).
@@ -19,8 +20,7 @@ Notes:
   omit it to search from the current working directory.
 - Results are sorted newest-first and capped at 100 entries. \
   If results are truncated, use a more specific pattern or path.
-- Use `grep` when you need to search by file *content* rather than file name.
-""".strip()
+- Use `grep` when you need to search by file *content* rather than file name."""
 
 _LIMIT = 100
 

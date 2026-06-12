@@ -19,7 +19,7 @@ from hey.infrastructure.repositories.chat import InMemoryChatRepository, SQLiteC
 from hey.infrastructure.repositories.project import LocalProjectRepository
 from hey.infrastructure.repositories.tool import BuiltinToolRepository, CompositeToolRepository, MCPToolRepository
 from hey.infrastructure.sandbox import build_sandbox_runner
-from hey.infrastructure.tool.builtins.dependencies import ToolDependencies
+from hey.infrastructure.tool.dependencies import ToolDependencies
 
 from .constants import (
     CODEX_MODEL_PREFIX,

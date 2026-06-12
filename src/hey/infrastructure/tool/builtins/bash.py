@@ -9,7 +9,7 @@ from hey.domain.services.sandbox import ISandboxRunner
 from hey.domain.services.tool import generate_tool_spec_from_callable
 from hey.infrastructure.sandbox.noop import NoopSandboxRunner
 
-_DESCRIPTION = """
+_DESCRIPTION = """\
 Execute a shell command and return its combined stdout/stderr output.
 
 Be aware of the current OS and shell environment when composing commands.
@@ -19,8 +19,7 @@ Parameters:
 - command: Shell command to run.
 - workdir: Optional directory to run in.
 - timeout: Timeout in milliseconds. The process is killed when exceeding the timeout
-  (default: 120000ms / 2 minutes).
-"""
+  (default: 120000ms / 2 minutes)."""
 
 _DEFAULT_TIMEOUT_MS = 120_000
 

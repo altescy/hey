@@ -11,7 +11,7 @@ from hey.infrastructure.tool.builtins import (
     web_fetch,
     web_search,
 )
-from hey.infrastructure.tool.builtins.dependencies import ToolDependencies
+from hey.infrastructure.tool.dependencies import ToolDependencies
 
 # Each entry pairs an availability check with the corresponding factory.
 # Tools whose is_available() returns False are silently skipped at startup.
