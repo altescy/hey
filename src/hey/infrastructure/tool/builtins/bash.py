@@ -5,9 +5,9 @@ from typing import Optional
 
 from hey.domain.entities.sandbox import PermissionProfile, SandboxExecRequest
 from hey.domain.entities.tool import ToolSpec
+from hey.domain.services.sandbox import ISandboxRunner
 from hey.domain.services.tool import generate_tool_spec_from_callable
 from hey.infrastructure.sandbox.noop import NoopSandboxRunner
-from hey.infrastructure.sandbox.protocol import SandboxRunner
 
 _DESCRIPTION = """
 Execute a shell command and return its combined stdout/stderr output.
@@ -45,7 +45,7 @@ def _shell_command(command: str) -> list[str]:
 
 
 def create_tool_spec(
-    sandbox_runner: SandboxRunner | None = None,
+    sandbox_runner: ISandboxRunner | None = None,
     permission_profile: PermissionProfile | None = None,
 ) -> ToolSpec:
     runner = sandbox_runner or NoopSandboxRunner()

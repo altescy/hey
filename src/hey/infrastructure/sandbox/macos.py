@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 
 from hey.domain.entities.sandbox import FileSystemRule, PermissionProfile, SandboxExecRequest, SandboxExecResult
+from hey.domain.services.sandbox import ISandboxRunner
 from hey.infrastructure.sandbox.exceptions import SandboxUnavailableError
 
 
@@ -94,7 +95,7 @@ def build_seatbelt_profile(profile: PermissionProfile, cwd: Path, *, temp_dir: P
     return "\n".join(lines) + "\n"
 
 
-class MacOSSandboxRunner:
+class MacOSSandboxRunner(ISandboxRunner):
     def __init__(self, sandbox_exec_path: str = "/usr/bin/sandbox-exec") -> None:
         self._sandbox_exec_path = sandbox_exec_path
 

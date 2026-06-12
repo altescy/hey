@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Protocol
 
 from hey.domain.entities.sandbox import (
     FileSystemMode,
@@ -10,7 +11,13 @@ from hey.domain.entities.sandbox import (
     NetworkPolicy,
     PermissionProfile,
     SandboxEnforcement,
+    SandboxExecRequest,
+    SandboxExecResult,
 )
+
+
+class ISandboxRunner(Protocol):
+    async def run(self, request: SandboxExecRequest) -> SandboxExecResult: ...
 
 
 def build_workspace_permission_profile(

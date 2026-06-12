@@ -3,9 +3,10 @@ from __future__ import annotations
 import asyncio
 
 from hey.domain.entities.sandbox import SandboxExecRequest, SandboxExecResult
+from hey.domain.services.sandbox import ISandboxRunner
 
 
-class NoopSandboxRunner:
+class NoopSandboxRunner(ISandboxRunner):
     async def run(self, request: SandboxExecRequest) -> SandboxExecResult:
         process = await asyncio.create_subprocess_exec(
             *request.command,
