@@ -14,10 +14,12 @@ from hey.domain.repositories.chat import IChatRepository
 from hey.domain.repositories.tool import IToolRepository
 from hey.domain.services.agentsmd import build_agents_instructions
 from hey.domain.services.project import get_hey_dot_directory
+from hey.domain.services.sandbox import build_workspace_permission_profile
 from hey.infrastructure.repositories.chat import InMemoryChatRepository, SQLiteChatRepository
 from hey.infrastructure.repositories.project import LocalProjectRepository
 from hey.infrastructure.repositories.tool import BuiltinToolRepository, CompositeToolRepository, MCPToolRepository
-from hey.infrastructure.tool.builtins.dependencies import ToolDependencies
+from hey.infrastructure.sandbox import build_sandbox_runner
+from hey.infrastructure.tool.dependencies import ToolDependencies
 
 from .constants import (
     CODEX_MODEL_PREFIX,
@@ -49,17 +51,17 @@ def build_llm_spec(config: ChatConfig, *, project_directory: Path | None = None)
     instructions = _resolve_chat_instructions(config, project_directory=project_directory)
 
     if model.startswith(COPILOT_MODEL_PREFIX):
-        from hey.infrastructure.llm.copilot import get_copilot_spec
+        from hey.infrastructure.llm.specs.copilot import get_copilot_spec
 
         return get_copilot_spec(model=model[len(COPILOT_MODEL_PREFIX) :], instructions=instructions)
 
     if model.startswith(CODEX_MODEL_PREFIX):
-        from hey.infrastructure.llm.codex import get_codex_spec
+        from hey.infrastructure.llm.specs.codex import get_codex_spec
 
         return get_codex_spec(model=model[len(CODEX_MODEL_PREFIX) :], instructions=instructions)
 
     if model.startswith(OPENCODE_GO_MODEL_PREFIX):
-        from hey.infrastructure.llm.opencode import get_opencode_spec
+        from hey.infrastructure.llm.specs.opencode import get_opencode_spec
 
         return get_opencode_spec(
             model=model[len(OPENCODE_GO_MODEL_PREFIX) :],
@@ -68,7 +70,7 @@ def build_llm_spec(config: ChatConfig, *, project_directory: Path | None = None)
         )
 
     if model.startswith(OPENCODE_MODEL_PREFIX):
-        from hey.infrastructure.llm.opencode import get_opencode_spec
+        from hey.infrastructure.llm.specs.opencode import get_opencode_spec
 
         return get_opencode_spec(
             model=model[len(OPENCODE_MODEL_PREFIX) :],
@@ -76,7 +78,7 @@ def build_llm_spec(config: ChatConfig, *, project_directory: Path | None = None)
             instructions=instructions,
         )
 
-    from hey.infrastructure.llm.litellm import get_litellm_spec
+    from hey.infrastructure.llm.specs.litellm import get_litellm_spec
 
     return get_litellm_spec(model=model, instructions=instructions)
 
@@ -132,8 +134,27 @@ def build_chat_repository(
     return SQLiteChatRepository(get_hey_dot_directory(project_directory) / HEY_DB_FILENAME)
 
 
-def build_tool_dependencies(project_id: ProjectID, chat_repository: IChatRepository) -> ToolDependencies:
-    return ToolDependencies(chat_repository=chat_repository, project_id=project_id)
+def build_tool_dependencies(
+    project_id: ProjectID,
+    chat_repository: IChatRepository,
+    *,
+    config: ChatConfig,
+    project_directory: Path,
+) -> ToolDependencies:
+    enforcement = config.sandbox.enforcement if config.sandbox.enabled else "disabled"
+    permission_profile = build_workspace_permission_profile(
+        project_directory,
+        mode=config.sandbox.filesystem,
+        network=config.sandbox.network,
+        enforcement=enforcement,
+    )
+    return ToolDependencies(
+        chat_repository=chat_repository,
+        project_id=project_id,
+        project_directory=project_directory,
+        sandbox_runner=build_sandbox_runner(permission_profile),
+        permission_profile=permission_profile,
+    )
 
 
 def build_tool_repository(config: ChatConfig, dependencies: ToolDependencies) -> IToolRepository:

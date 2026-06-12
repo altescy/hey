@@ -1,6 +1,11 @@
+from pathlib import Path
+
 from hey.domain.entities.tool import ToolSpec
 from hey.domain.services.file import use_file_time
+from hey.domain.services.sandbox import assert_path_access, resolve_tool_path
 from hey.domain.services.tool import generate_tool_spec_from_callable
+
+from ..dependencies import ToolDependencies
 
 _DEFAULT_LIMIT = 2000
 _MAX_LINE_LENGTH = 2000
@@ -23,15 +28,14 @@ Notes:
   a continuation hint with the next offset is included at the end.
 - Lines longer than {_MAX_LINE_LENGTH} characters are truncated.
 - Binary files are not supported and will produce an error.
-- Use `grep` to search for specific content, or `glob` to locate files by name.
-""".strip()
+- Use `grep` to search for specific content, or `glob` to locate files by name."""
 
 
 def is_available() -> bool:
     return True
 
 
-def create_tool_spec() -> ToolSpec:
+def create_tool_spec(dependencies: ToolDependencies | None = None) -> ToolSpec:
     async def read(file_path: str, offset: int = 1, limit: int = _DEFAULT_LIMIT) -> str:
         """Read a text file with optional offset/limit pagination."""
         if offset < 1:
@@ -39,7 +43,12 @@ def create_tool_spec() -> ToolSpec:
         if limit < 1:
             raise ValueError("limit must be >= 1")
 
-        async with use_file_time(file_path) as file_time:
+        project_directory = dependencies.project_directory if dependencies is not None else Path.cwd()
+        path = resolve_tool_path(file_path, project_directory=project_directory)
+        if dependencies is not None:
+            assert_path_access(path, profile=dependencies.permission_profile, access="read")
+
+        async with use_file_time(path) as file_time:
             path = file_time.path
             if not path.exists():
                 raise FileNotFoundError(f"File not found: {path}")

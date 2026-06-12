@@ -1,7 +1,10 @@
 from pathlib import Path
 
 from hey.domain.entities.tool import ToolSpec
+from hey.domain.services.sandbox import assert_path_access, resolve_tool_path
 from hey.domain.services.tool import generate_tool_spec_from_callable
+
+from ..dependencies import ToolDependencies
 
 _DESCRIPTION = """\
 List files and directories under a given path as an indented tree.
@@ -16,8 +19,7 @@ Notes:
   for, and `grep` when you want to find files by content. Use `ls` to get a \
   broad overview of an unfamiliar directory.
 - Results are capped at 200 entries. If the tree is truncated, narrow the \
-  search by passing a more specific `path`.
-""".strip()
+  search by passing a more specific `path`."""
 
 _DEFAULT_IGNORE: frozenset[str] = frozenset(
     [
@@ -50,10 +52,13 @@ def is_available() -> bool:
     return True
 
 
-def create_tool_spec() -> ToolSpec:
+def create_tool_spec(dependencies: ToolDependencies | None = None) -> ToolSpec:
     async def ls(path: str = ".", ignore: list[str] | None = None) -> str:
         """List files and directories under path as an indented tree."""
-        root = Path(path).resolve()
+        project_directory = dependencies.project_directory if dependencies is not None else Path.cwd()
+        root = resolve_tool_path(path, project_directory=project_directory)
+        if dependencies is not None:
+            assert_path_access(root, profile=dependencies.permission_profile, access="read")
         if not root.exists():
             raise FileNotFoundError(f"Path not found: {root}")
         if not root.is_dir():

@@ -36,12 +36,20 @@ class ChatCompactionConfig(BaseModel):
     preserve_recent_tokens: int | None = Field(default=None, gt=0)
 
 
+class SandboxConfig(BaseModel):
+    enabled: bool = True
+    enforcement: Literal["managed", "external", "disabled"] = "managed"
+    filesystem: Literal["read_only", "workspace_write", "unrestricted"] = "workspace_write"
+    network: Literal["restricted", "enabled", "proxy_only"] = "restricted"
+
+
 class ChatConfig(BaseModel):
     model: NonEmptyString
     instructions: str | None = None
     permission: ToolPermission = Field(default_factory=dict)
     session_timeout: float = Field(default=3600.0, description="Seconds of inactivity before a new session is started.")
     compaction: ChatCompactionConfig = Field(default_factory=ChatCompactionConfig)
+    sandbox: SandboxConfig = Field(default_factory=SandboxConfig)
     mcp: Mapping[str, MCPServerConfig] = Field(default_factory=dict)
 
 

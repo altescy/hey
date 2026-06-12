@@ -224,7 +224,7 @@ class ChatDisplay:
         def _read() -> None:
             try:
                 result = self._console.input(prompt, stream=stream)
-            except EOFError:
+            except (EOFError, OSError):
                 loop.call_soon_threadsafe(future.set_result, None)
             except Exception as exc:
                 loop.call_soon_threadsafe(future.set_exception, exc)
@@ -244,7 +244,11 @@ class ChatDisplay:
         decision: Literal["allow", "deny"] = "deny"
         async with self._permission_lock:
             self._apply_spacing(_BlockType.PERMISSION)
-            tty_in = self._get_tty_in()
+            try:
+                tty_in = self._get_tty_in()
+            except OSError:
+                self._asking_permission.discard(record["id"])
+                return decision
             writer = BorderedWriter(self._console, border="┃", border_style="yellow", padding=1)
             writer.write(
                 f"[black bold on yellow] Permission required [/black bold on yellow] {render_tool_call(record)}"

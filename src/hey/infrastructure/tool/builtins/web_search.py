@@ -19,8 +19,7 @@ Parameters:
 Notes:
 - Requires the [web] optional dependencies: pip install 'hey[web]'
 - DuckDuckGo may rate-limit aggressive usage. Space out repeated calls if needed.
-- Snippets are brief; use web_fetch to retrieve the full content of a specific page.
-""".strip()
+- Snippets are brief; use web_fetch to retrieve the full content of a specific page."""
 
 _MAX_RESULTS_DEFAULT = 10
 _MAX_RESULTS_LIMIT = 50

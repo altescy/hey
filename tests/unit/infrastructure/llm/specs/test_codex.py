@@ -1,7 +1,7 @@
 import pytest
 
 from hey.domain.entities.llm import AssistantMessage, SystemMessage, TextContent, ToolResultMessage, UserMessage
-from hey.infrastructure.llm.codex import (
+from hey.infrastructure.llm.specs.codex import (
     CodexQuery,
     _build_request_body,
     _message_to_input_item,

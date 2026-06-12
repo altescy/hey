@@ -43,7 +43,7 @@ from hey.domain.entities.llm import (
     Usage,
 )
 
-from .auth.codex import CODEX_API_URL, CodexAuthProvider
+from ..auth.codex import CODEX_API_URL, CodexAuthProvider
 
 # ---------------------------------------------------------------------------
 # Serialisation — Responses API format

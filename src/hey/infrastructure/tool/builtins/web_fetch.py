@@ -20,8 +20,7 @@ Parameters:
 Notes:
 - Requires the [web] optional dependencies: pip install 'hey[web]'
 - Binary content (images, etc.) that cannot be converted to text will raise an error.
-- If a page requires JavaScript rendering, the returned content may be incomplete.
-""".strip()
+- If a page requires JavaScript rendering, the returned content may be incomplete."""
 
 _MAX_BYTES_DEFAULT = 5 * 1024 * 1024  # 5MB
 _TIMEOUT_DEFAULT = 30

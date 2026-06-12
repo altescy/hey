@@ -19,3 +19,12 @@ def test_chat_config_allows_model_and_optional_instruction_values() -> None:
 
     assert config.model == "custom-model"
     assert config.instructions == "custom instructions"
+
+
+def test_chat_config_enables_managed_workspace_sandbox_by_default() -> None:
+    config = ChatConfig(model="custom-model")
+
+    assert config.sandbox.enabled is True
+    assert config.sandbox.enforcement == "managed"
+    assert config.sandbox.filesystem == "workspace_write"
+    assert config.sandbox.network == "restricted"
