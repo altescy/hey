@@ -6,29 +6,44 @@
 
 ```
 src/hey/
-├── interface/         # CLI: argparse, terminal rendering (rich)
+├── interface/                # CLI: argparse, terminal rendering (rich)
 │   └── cli/
-├── application/       # Use cases + DTOs (TypedDict)
+├── application/              # Use cases + DTOs (TypedDict)
 │   ├── usecases/
+│   ├── defaults.py
 │   └── dto.py
-├── bootstrap/         # Composition root (Container, factories)
-├── domain/            # Pure domain (no I/O)
-│   ├── entities/
-│   ├── repositories/  # Protocols only
-│   └── services/      # Domain logic, agent/llm/workflow orchestration
-├── core/              # Reusable engine pieces (no domain knowledge)
-│   ├── agent/         # Generic agent runtime (Engine/Reducer/Contextualizer)
-│   ├── workflow/      # WorkflowExecutor, WorkflowGraph, EventSource
-│   ├── mcp/           # MCP client + transports
-│   ├── schema/        # JSON schema / Python signature inspection
-│   ├── pattern/       # JSON pattern matching (used for permissions)
-│   └── markdown/      # Markdown parser/reducer
-└── infrastructure/    # Concrete adapters (I/O, side effects)
-    ├── llm/           # litellm / copilot / codex / bedrock backends
-    ├── repositories/  # SQLite/in-memory chat, project, tool repos
-    ├── tool/          # Built-in tool implementations
-    ├── chat/  project/
+├── bootstrap/                # Composition root (Container, factories)
+├── domain/                   # Pure domain (no I/O)
+│   ├── entities/             # Data shapes
+│   ├── exceptions/           # Domain-level exceptions (tool, sandbox)
+│   ├── repositories/         # Persistence protocols
+│   └── services/             # Domain logic + capability protocols
+│                             #   (ISandboxRunner, AuthProvider live here)
+├── core/                     # Reusable engine pieces (stdlib + pydantic only)
+│   ├── agent/                # Generic agent runtime (Engine/Reducer/Contextualizer)
+│   ├── workflow/             # WorkflowExecutor, WorkflowGraph, EventSource
+│   ├── mcp/                  # MCP client + transports
+│   ├── schema/               # JSON schema / Python signature inspection
+│   ├── pattern/              # JSON pattern matching (used for permissions)
+│   └── markdown/             # Markdown parser/reducer
+└── infrastructure/           # Concrete adapters (I/O, side effects)
+    ├── llm/
+    │   ├── specs/            # Backend LLMSpecs (codex, copilot, litellm,
+    │   │                     #   opencode, _openai_chat shared helpers)
+    │   └── auth/             # Token providers and persistence
+    │                         #   (CodexAuthProvider, CopilotAuthProvider, store)
+    ├── sandbox/
+    │   ├── manager.py        # Factory: build_sandbox_runner
+    │   └── runners/          # ISandboxRunner implementations (macos, noop)
+    ├── tool/
+    │   ├── dependencies.py   # ToolDependencies DI bundle
+    │   └── builtins/         # Per-tool modules (bash, edit, glob, …)
+    ├── repositories/         # IChatRepository, IProjectRepository,
+    │                         #   IToolRepository implementations
+    └── paths.py              # I/O wrapper over domain/services/paths
 ```
+
+Each `infrastructure/<subsystem>/` follows the same two-level pattern: top level holds the factory / DI bundle, sub-package holds concrete implementations. The exception is `repositories/`, which has no factory dispatch — selection happens in `bootstrap/factories.py`.
 
 ### Dependency rule
 
@@ -86,17 +101,25 @@ graph TD
 
 `build_llm_spec` selects an `LLMSpec` by **model prefix** (`bootstrap/constants.py`):
 
-| Prefix              | Backend module                          | Required extra |
-|---------------------|------------------------------------------|----------------|
-| `github-copilot/…`  | `infrastructure.llm.copilot`            | `copilot`      |
-| `codex/…`           | `infrastructure.llm.codex`              | `codex`        |
-| `opencode-go/…`     | `infrastructure.llm.opencode`           | `opencode`     |
-| `opencode/…`        | `infrastructure.llm.opencode`           | `opencode`     |
-| (anything else)     | `infrastructure.llm.litellm` (default)  | `litellm`      |
+| Prefix              | Backend module                                | Required extra |
+|---------------------|-----------------------------------------------|----------------|
+| `github-copilot/…`  | `infrastructure.llm.specs.copilot`            | `copilot`      |
+| `codex/…`           | `infrastructure.llm.specs.codex`              | `codex`        |
+| `opencode-go/…`     | `infrastructure.llm.specs.opencode`           | `opencode`     |
+| `opencode/…`        | `infrastructure.llm.specs.opencode`           | `opencode`     |
+| (anything else)     | `infrastructure.llm.specs.litellm` (default)  | `litellm`      |
 
 Note: `opencode-go/…` routes to `https://opencode.ai/zen/go/v1/chat/completions`; `opencode/…` routes to `https://opencode.ai/zen/v1/chat/completions`. Both require the `OPENCODE_API_KEY` environment variable.
 
-Backend imports are deferred to call time so missing extras only fail when you actually try to use that backend.
+Backend imports are deferred to call time inside `build_llm_spec` so missing extras only fail when you actually try to use that backend. `infrastructure/llm/__init__.py` is intentionally empty for the same reason — eager re-exports would pull in optional spec modules at import time.
+
+Copilot and Codex backends sit on top of token providers under `infrastructure/llm/auth/`:
+
+- `CodexAuthProvider` (`auth/codex.py`) — browser/PKCE or device-code flow, silently refreshes before each call.
+- `CopilotAuthProvider` (`auth/copilot.py`) — GitHub device-grant; long-lived tokens, no refresh.
+- `auth/store.py` — JSON token persistence under `~/.config/hey/auth/<provider>.json` via `infrastructure.paths.global_auth_dir`.
+
+Both providers structurally satisfy the `AuthProvider` protocol declared in `domain/services/auth.py`.
 
 `build_llm_spec` also calls `build_agents_instructions(project_directory)` (`domain/services/agentsmd.py`) to load `AGENTS.md` files and prepend them to the system prompt. Discovery order: nearest `AGENTS.md` walking up from the project root, then `~/.config/hey/AGENTS.md`. The two sources are concatenated; the result is merged with `ChatConfig.instructions`.
 
@@ -220,8 +243,6 @@ The repository is reused as a **transaction boundary** via its context manager (
 
 Entry: `hey = hey.__main__:run` → `hey.interface.cli.main` (`src/hey/interface/cli/app.py`). Subcommands live in `src/hey/interface/cli/commands/` (`chat.py`, `history.py`).
 
-> Note: `src/hey/cli/` exists but is empty (only `__pycache__`). The real CLI is under `src/hey/interface/cli/`. Don't add code to `src/hey/cli/`.
-
 End-to-end, a single `hey "what is X?"` invocation looks like:
 
 ```mermaid
@@ -268,20 +289,55 @@ Two complementary layers:
 
 If the resolved action is `ask`, the use case calls the `ask_permission` callback wired via `Container.build(ask_permission=...)`. The CLI implementation prompts interactively via `interface/cli/display/chat.py:ask_permission`, serialized through an `asyncio.Lock` to avoid overlapping prompts when multiple tool calls in one turn need approval.
 
+## Sandbox
+
+Built-in tools that touch the filesystem run under a `PermissionProfile`. Enforcement happens on two layers:
+
+- **In-process path guard** (`domain/services/sandbox.py`) — pure policy interpretation. `resolve_tool_path` normalizes user-supplied paths against the project directory; `assert_path_access` checks the resolved `Path` against the profile and raises `ToolCallDenied` on violation. Used by `read`, `edit`, `glob`, `grep`, `ls`.
+- **Kernel-level sandbox** (`infrastructure/sandbox/runners/`) — `bash` runs through an `ISandboxRunner`. On macOS, `MacOSSandboxRunner` translates the `PermissionProfile` into a Seatbelt (SBPL) profile and execs the command via `/usr/bin/sandbox-exec`. `NoopSandboxRunner` is the fallback when enforcement is `disabled`.
+
+```mermaid
+graph LR
+  Config[ChatConfig.sandbox]
+  Builder[build_workspace_permission_profile]
+  Profile[PermissionProfile]
+  Manager[build_sandbox_runner]
+  Runner[ISandboxRunner]
+  Bash[bash tool]
+  FileTools[read/edit/glob/grep/ls]
+
+  Config --> Builder --> Profile
+  Profile --> Manager --> Runner --> Bash
+  Profile --> FileTools
+```
+
+Defaults: `enforcement="managed"`, `filesystem="workspace_write"`, `network="restricted"`. Protected names inside the workspace (`.git`, `.hey`, `.agents`, `.codex`) are denied even under workspace-write.
+
+Domain owns the abstractions:
+- `domain/entities/sandbox.py` — `PermissionProfile`, `FileSystemPolicy`, `NetworkPolicy`, `SandboxExecRequest`, `SandboxExecResult`.
+- `domain/services/sandbox.py` — `ISandboxRunner` (Protocol), `build_workspace_permission_profile`, `resolve_tool_path`, `assert_path_access`.
+- `domain/exceptions/sandbox.py` — `SandboxError`, `SandboxUnavailableError`.
+
+Infrastructure provides the implementations:
+- `infrastructure/sandbox/manager.py` — `build_sandbox_runner(profile)` picks a concrete runner by `profile.enforcement` and `platform.system()`.
+- `infrastructure/sandbox/runners/{macos,noop}.py` — concrete `ISandboxRunner` implementations.
+
+> Status: managed enforcement is currently only implemented on Darwin. On other platforms `build_sandbox_runner` raises `SandboxUnavailableError`. Linux/Windows support is planned; until then, set `chat.sandbox.enabled = false` to opt out.
+
 ## Optional dependencies
 
 Optional extras gate entire backends/toolsets (`pyproject.toml`):
 
-| Extra      | Enables                                                                |
-|------------|------------------------------------------------------------------------|
-| `litellm`  | Default LLM backend (`infrastructure.llm.litellm`).                    |
-| `copilot`  | GitHub Copilot backend (`github-copilot/...` model prefix).            |
-| `codex`    | Codex backend (`codex/...` model prefix).                              |
-| `opencode` | OpenCode backend (`opencode/...` and `opencode-go/...` model prefixes). |
-| `bedrock`  | AWS Bedrock support (via litellm + boto3).                             |
-| `web`      | `web_fetch` (markitdown) and `web_search` (ddgs) built-in tools.       |
+| Extra      | Enables                                                                       |
+|------------|-------------------------------------------------------------------------------|
+| `litellm`  | Default LLM backend (`infrastructure.llm.specs.litellm`).                     |
+| `copilot`  | GitHub Copilot backend (`github-copilot/...` model prefix).                   |
+| `codex`    | Codex backend (`codex/...` model prefix).                                     |
+| `opencode` | OpenCode backend (`opencode/...` and `opencode-go/...` model prefixes).       |
+| `bedrock`  | AWS Bedrock support (via litellm + boto3).                                    |
+| `web`      | `web_fetch` (markitdown) and `web_search` (ddgs) built-in tools.              |
 
-Imports of these packages MUST stay lazy (deferred to the factory or `is_available()` check). The matching `is_available()` in each builtin tool module is what decides whether the tool is registered at all.
+Imports of these packages MUST stay lazy (deferred to the factory or `is_available()` check). The matching `is_available()` in each builtin tool module is what decides whether the tool is registered at all. `infrastructure/llm/__init__.py` is intentionally empty so that importing the package does not eagerly pull in any spec module.
 
 ## Tests
 
@@ -294,8 +350,11 @@ Imports of these packages MUST stay lazy (deferred to the factory or `is_availab
 | Want to add…                  | Touch                                                                                       |
 |-------------------------------|---------------------------------------------------------------------------------------------|
 | New CLI subcommand            | `interface/cli/commands/<name>.py`, register in `interface/cli/app.py`.                     |
-| New built-in tool             | `infrastructure/tool/builtins/<name>.py` (`is_available`, `create_tool_spec`); add to `_BUILTIN_TOOL_ENTRIES` in `infrastructure/repositories/tool/builtin.py`. |
-| New LLM backend               | `infrastructure/llm/<backend>.py` exposing `get_<backend>_spec(...)`; route via prefix in `bootstrap/factories.build_llm_spec`; add an optional extra in `pyproject.toml`. |
+| New built-in tool             | `infrastructure/tool/builtins/<name>.py` (`is_available`, `create_tool_spec`); register in `infrastructure/repositories/tool/builtin.py` (`_BUILTIN_TOOL_ENTRIES` or `_DEPENDENCY_TOOL_ENTRIES`). File-touching tools must call `resolve_tool_path` + `assert_path_access` from `domain/services/sandbox`. |
+| New LLM backend               | `infrastructure/llm/specs/<backend>.py` exposing `get_<backend>_spec(...)`; route via prefix in `bootstrap/factories.build_llm_spec` (keep the import inside the routing branch); add an optional extra in `pyproject.toml`. |
+| New auth provider             | `infrastructure/llm/auth/<provider>.py`; implement `domain/services/auth.AuthProvider`; persist tokens via `auth/store.py`. |
+| New sandbox runner            | `infrastructure/sandbox/runners/<platform>.py` implementing `domain/services/sandbox.ISandboxRunner`; dispatch in `infrastructure/sandbox/manager.build_sandbox_runner`. |
 | New repository implementation | Protocol in `domain/repositories/<x>.py`; impl in `infrastructure/repositories/<x>/`; wire in `bootstrap/factories.py`. |
 | New use case                  | `application/usecases/<name>.py` + DTOs in `application/dto.py`; expose via `Container`.     |
 | New entity                    | `domain/entities/<name>.py`, kept I/O-free.                                                  |
+| New capability protocol       | `domain/services/<name>.py` (alongside `ISandboxRunner`, `AuthProvider`).                    |
