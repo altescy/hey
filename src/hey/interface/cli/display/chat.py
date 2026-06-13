@@ -54,8 +54,10 @@ class ChatDisplay:
             return open("CONIN$", "r", encoding="utf-8")
         return open("/dev/tty", "r", encoding="utf-8")
 
-    def _start_live(self, renderable: RenderableType) -> None:
+    def _start_live(self, renderable: RenderableType, block_type: _BlockType | None = None) -> None:
         self._stop_live()
+        if block_type is not None:
+            self._apply_spacing(block_type)
         self._live = Live(renderable, console=self._console, refresh_per_second=24, transient=True, screen=False)
         self._live.start()
 
@@ -137,6 +139,8 @@ class ChatDisplay:
         self._phase = _Phase.IDLE
 
     def append_thinking_delta(self, delta: str) -> None:
+        if self._previous_block_type != _BlockType.THINKING:
+            self._apply_spacing(_BlockType.THINKING)
         self._phase = _Phase.STREAMING
         writer = self._ensure_thinking_writer()
         writer.write(delta)
@@ -151,14 +155,14 @@ class ChatDisplay:
             self._phase = _Phase.STREAMING
         elif self._thinking_writer is not None:
             self._finish_thinking()
-            self._start_live(self._streaming_renderable())
+            self._start_live(self._streaming_renderable(), _BlockType.TEXT)
 
         committed, self._md_buffer = reduce_markdown(delta, self._md_buffer)
         if committed:
             self._stop_live()
             for block in committed:
                 self._print(Markdown(block), _BlockType.TEXT)
-            self._start_live(self._streaming_renderable())
+            self._start_live(self._streaming_renderable(), _BlockType.TEXT)
 
         self._update_live(self._streaming_renderable())
 
