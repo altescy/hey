@@ -146,7 +146,7 @@ class ChatDisplay:
         writer.write(delta)
 
     def set_thinking_text(self, text: str) -> None:
-        self._apply_spacing(_BlockType.THINKING)
+        pass
 
     def append_text_delta(self, delta: str) -> None:
         if self._phase != _Phase.STREAMING:
