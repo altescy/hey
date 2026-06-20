@@ -1,3 +1,5 @@
+import datetime
+import re
 from collections import defaultdict
 from typing import Any, Self
 
@@ -7,9 +9,31 @@ from hey.domain.entities.project import ProjectID
 from hey.domain.repositories.chat import (
     ChatMessageRetrievalRequest,
     ChatMessageRetrievalResponse,
+    ChatSessionListItem,
+    ChatSessionRetrievalRequest,
+    ChatSessionRetrievalResponse,
     IChatRepository,
 )
 from hey.domain.services.chat import get_chat_timestamp
+
+_PREVIEW_RE = re.compile(r"\s+")
+
+
+def _normalize_preview(text: str) -> str:
+    return _PREVIEW_RE.sub(" ", text).strip()
+
+
+def _first_user_preview(messages: list[ChatMessage]) -> str | None:
+    for message in messages:
+        if message.kind != "normal":
+            continue
+        if message.message.get("role") != "user":
+            continue
+        text = "".join(part["text"] for part in message.message.get("parts", ()) if part["type"] == "text")
+        text = _normalize_preview(text)
+        if text:
+            return text
+    return None
 
 
 class InMemoryChatRepository(IChatRepository):
@@ -60,6 +84,68 @@ class InMemoryChatRepository(IChatRepository):
         if not sessions:
             return None
         return max(sessions, key=lambda s: s.updated_at)
+
+    def get_sessions_by_project_id(
+        self,
+        project_id: ProjectID,
+        request: ChatSessionRetrievalRequest | None = None,
+    ) -> ChatSessionRetrievalResponse:
+        req = request or ChatSessionRetrievalRequest()
+        sessions = [s for s in self._sessions.values() if s.project_id == project_id]
+
+        def _sort_key(session: ChatSession) -> datetime.datetime:
+            return session.updated_at if req.sort_by == "updated_at" else session.created_at
+
+        sessions.sort(key=_sort_key, reverse=req.reverse)
+
+        total = len(sessions)
+        offset = max(req.offset, 0)
+        if req.limit is None:
+            page = sessions[offset:]
+            next_offset: int | None = None
+        else:
+            limit = max(req.limit, 0)
+            page = sessions[offset : offset + limit]
+            next_candidate = offset + limit
+            next_offset = next_candidate if next_candidate < total else None
+
+        results = [
+            ChatSessionListItem(
+                session=s,
+                message_count=len(self._messages.get(s.id, [])),
+                preview=_first_user_preview(self._messages.get(s.id, [])),
+            )
+            for s in page
+        ]
+        return ChatSessionRetrievalResponse(results=results, total=total, next_offset=next_offset)
+
+    def count_messages_by_session_id(
+        self,
+        session_id: ChatSessionID,
+        query: str | None = None,
+    ) -> int:
+        messages = self._messages.get(session_id, [])
+        return len(self._apply_query(messages, query))
+
+    def count_messages_by_project_id(
+        self,
+        project_id: ProjectID,
+        query: str | None = None,
+    ) -> int:
+        session_ids = {s.id for s in self._sessions.values() if s.project_id == project_id}
+        messages = [m for sid in session_ids for m in self._messages.get(sid, [])]
+        return len(self._apply_query(messages, query))
+
+    @staticmethod
+    def _apply_query(messages: list[ChatMessage], query: str | None) -> list[ChatMessage]:
+        query = (query or "").strip().lower()
+        if not query:
+            return messages
+        return [
+            msg
+            for msg in messages
+            if any(part["text"].lower().find(query) >= 0 for part in msg.message.get("parts", ()))
+        ]
 
     def get_messages_by_session_id(
         self,

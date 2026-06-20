@@ -15,7 +15,7 @@ import pytest
 from hey.domain.entities.chat import ChatSessionID
 from hey.domain.entities.llm import UserMessage
 from hey.domain.entities.project import ProjectID
-from hey.domain.repositories.chat import ChatMessageRetrievalRequest, IChatRepository
+from hey.domain.repositories.chat import ChatMessageRetrievalRequest, ChatSessionRetrievalRequest, IChatRepository
 from hey.infrastructure.repositories.chat.inmemory import InMemoryChatRepository
 from hey.infrastructure.repositories.chat.sqlite import SQLiteChatRepository
 
@@ -285,6 +285,117 @@ class ChatRepositoryContractTests:
         session = repo.create_session(_PROJECT_A)
         ids = [repo.create_message(session.id, _user_message(f"msg{i}")).id for i in range(5)]
         assert len(set(ids)) == 5
+
+    # ------------------------------------------------------------------
+    # get_sessions_by_project_id
+    # ------------------------------------------------------------------
+
+    def test_get_sessions_by_project_id_returns_empty_for_unknown_project(self) -> None:
+        repo = self.make_repository()
+        response = repo.get_sessions_by_project_id(_PROJECT_A)
+        assert response.results == []
+        assert response.total == 0
+        assert response.next_offset is None
+
+    def test_get_sessions_by_project_id_returns_only_project_sessions(self) -> None:
+        repo = self.make_repository()
+        repo.create_session(_PROJECT_A)
+        repo.create_session(_PROJECT_A)
+        repo.create_session(_PROJECT_B)
+
+        response = repo.get_sessions_by_project_id(_PROJECT_A)
+        assert response.total == 2
+        assert len(response.results) == 2
+        assert all(item.session.project_id == _PROJECT_A for item in response.results)
+
+    def test_get_sessions_by_project_id_counts_messages_and_preview(self) -> None:
+        repo = self.make_repository()
+        session = repo.create_session(_PROJECT_A)
+        repo.create_message(session.id, _user_message("hello world"))
+        repo.create_message(session.id, _user_message("second message"))
+
+        response = repo.get_sessions_by_project_id(_PROJECT_A)
+        assert response.total == 1
+        item = response.results[0]
+        assert item.message_count == 2
+        assert item.preview == "hello world"
+
+    def test_get_sessions_by_project_id_pagination(self) -> None:
+        repo = self.make_repository()
+        _chat_svc = "hey.infrastructure.repositories.chat.inmemory.get_chat_timestamp"
+        _chat_svc_sqlite = "hey.infrastructure.repositories.chat.sqlite.get_chat_timestamp"
+
+        with patch(_chat_svc, return_value=_TS_OLD), patch(_chat_svc_sqlite, return_value=_TS_OLD):
+            repo.create_session(_PROJECT_A)
+        with patch(_chat_svc, return_value=_TS_NEW), patch(_chat_svc_sqlite, return_value=_TS_NEW):
+            s2 = repo.create_session(_PROJECT_A)
+
+        response = repo.get_sessions_by_project_id(
+            _PROJECT_A,
+            ChatSessionRetrievalRequest(offset=0, limit=1),
+        )
+        assert response.total == 2
+        assert len(response.results) == 1
+        assert response.results[0].session.id == s2.id
+        assert response.next_offset == 1
+
+    def test_get_sessions_by_project_id_sort_by_created_at(self) -> None:
+        repo = self.make_repository()
+        _chat_svc = "hey.infrastructure.repositories.chat.inmemory.get_chat_timestamp"
+        _chat_svc_sqlite = "hey.infrastructure.repositories.chat.sqlite.get_chat_timestamp"
+
+        with patch(_chat_svc, return_value=_TS_OLD), patch(_chat_svc_sqlite, return_value=_TS_OLD):
+            s1 = repo.create_session(_PROJECT_A)
+        with patch(_chat_svc, return_value=_TS_NEW), patch(_chat_svc_sqlite, return_value=_TS_NEW):
+            s2 = repo.create_session(_PROJECT_A)
+
+        response = repo.get_sessions_by_project_id(
+            _PROJECT_A,
+            ChatSessionRetrievalRequest(sort_by="created_at", reverse=False),
+        )
+        assert [item.session.id for item in response.results] == [s1.id, s2.id]
+
+    # ------------------------------------------------------------------
+    # count_messages_by_session_id / count_messages_by_project_id
+    # ------------------------------------------------------------------
+
+    def test_count_messages_by_session_id(self) -> None:
+        repo = self.make_repository()
+        session = repo.create_session(_PROJECT_A)
+        repo.create_message(session.id, _user_message("hello"))
+        repo.create_message(session.id, _user_message("world"))
+
+        assert repo.count_messages_by_session_id(session.id) == 2
+
+    def test_count_messages_by_session_id_with_query(self) -> None:
+        repo = self.make_repository()
+        session = repo.create_session(_PROJECT_A)
+        repo.create_message(session.id, _user_message("apple pie"))
+        repo.create_message(session.id, _user_message("banana"))
+
+        assert repo.count_messages_by_session_id(session.id, query="apple") == 1
+        assert repo.count_messages_by_session_id(session.id, query="APPLE") == 1
+        assert repo.count_messages_by_session_id(session.id, query="no match") == 0
+
+    def test_count_messages_by_project_id(self) -> None:
+        repo = self.make_repository()
+        s1 = repo.create_session(_PROJECT_A)
+        s2 = repo.create_session(_PROJECT_A)
+        repo.create_message(s1.id, _user_message("one"))
+        repo.create_message(s2.id, _user_message("two"))
+        repo.create_message(repo.create_session(_PROJECT_B).id, _user_message("three"))
+
+        assert repo.count_messages_by_project_id(_PROJECT_A) == 2
+
+    def test_count_messages_by_project_id_with_query(self) -> None:
+        repo = self.make_repository()
+        s1 = repo.create_session(_PROJECT_A)
+        s2 = repo.create_session(_PROJECT_A)
+        repo.create_message(s1.id, _user_message("alpha one"))
+        repo.create_message(s2.id, _user_message("beta two"))
+
+        assert repo.count_messages_by_project_id(_PROJECT_A, query="alpha") == 1
+        assert repo.count_messages_by_project_id(_PROJECT_A, query="beta") == 1
 
 
 # ---------------------------------------------------------------------------

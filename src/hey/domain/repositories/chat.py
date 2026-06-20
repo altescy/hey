@@ -1,5 +1,5 @@
 import dataclasses
-from typing import Any, Protocol, Self
+from typing import Any, Literal, Protocol, Self
 
 from hey.domain.entities.chat import ChatMessage, ChatMessageKind, ChatSession, ChatSessionID
 from hey.domain.entities.llm import LLMMessage
@@ -14,8 +14,23 @@ class ChatMessageRetrievalRequest:
 
 
 @dataclasses.dataclass
+class ChatSessionRetrievalRequest:
+    offset: int = 0
+    limit: int | None = None
+    sort_by: Literal["updated_at", "created_at"] = "updated_at"
+    reverse: bool = True
+
+
+@dataclasses.dataclass
+class ChatSessionListItem:
+    session: ChatSession
+    message_count: int
+    preview: str | None
+
+
+@dataclasses.dataclass
 class ChatSessionRetrievalResponse:
-    results: list[ChatSession]
+    results: list[ChatSessionListItem]
     total: int
     next_offset: int | None
 
@@ -48,6 +63,21 @@ class IChatRepository(Protocol):
         self,
         project_id: ProjectID,
     ) -> ChatSession | None: ...
+    def get_sessions_by_project_id(
+        self,
+        project_id: ProjectID,
+        request: ChatSessionRetrievalRequest | None = None,
+    ) -> ChatSessionRetrievalResponse: ...
+    def count_messages_by_session_id(
+        self,
+        session_id: ChatSessionID,
+        query: str | None = None,
+    ) -> int: ...
+    def count_messages_by_project_id(
+        self,
+        project_id: ProjectID,
+        query: str | None = None,
+    ) -> int: ...
     def get_messages_by_session_id(
         self, session_id: ChatSessionID, request: ChatMessageRetrievalRequest | None = None
     ) -> ChatMessageRetrievalResponse: ...

@@ -1,4 +1,5 @@
 import json
+import re
 import sqlite3
 from pathlib import Path
 from typing import Any, Final, Self
@@ -11,11 +12,44 @@ from hey.domain.entities.project import ProjectID
 from hey.domain.repositories.chat import (
     ChatMessageRetrievalRequest,
     ChatMessageRetrievalResponse,
+    ChatSessionListItem,
+    ChatSessionRetrievalRequest,
+    ChatSessionRetrievalResponse,
     IChatRepository,
 )
 from hey.domain.services.chat import get_chat_timestamp
 
 _LLM_MESSAGE_TA: Final[TypeAdapter[LLMMessage]] = TypeAdapter(LLMMessage)
+
+_SESSIONS_QUERY = """
+SELECT
+    s.*,
+    COUNT(m.id) AS message_count,
+    (
+        SELECT m2.message
+        FROM chat_messages AS m2
+        WHERE m2.session_id = s.id AND m2.kind = 'normal'
+        ORDER BY m2.id ASC
+        LIMIT 1
+    ) AS first_message_json
+FROM chat_sessions AS s
+LEFT JOIN chat_messages AS m ON m.session_id = s.id
+WHERE s.project_id = ?
+GROUP BY s.id
+ORDER BY {order_column} {order_direction}
+LIMIT ? OFFSET ?
+"""
+
+_COUNT_MESSAGES_BY_SESSION = """
+SELECT COUNT(*) FROM chat_messages WHERE session_id = ?
+"""
+
+_COUNT_MESSAGES_BY_PROJECT = """
+SELECT COUNT(m.id)
+FROM chat_messages AS m
+INNER JOIN chat_sessions AS s ON s.id = m.session_id
+WHERE s.project_id = ?
+"""
 
 _CREATE_SESSIONS_TABLE = """
 CREATE TABLE IF NOT EXISTS chat_sessions (
@@ -152,6 +186,114 @@ class SQLiteChatRepository(IChatRepository):
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
+
+    def get_sessions_by_project_id(
+        self,
+        project_id: ProjectID,
+        request: ChatSessionRetrievalRequest | None = None,
+    ) -> ChatSessionRetrievalResponse:
+        req = request or ChatSessionRetrievalRequest()
+        order_column = "updated_at" if req.sort_by == "updated_at" else "created_at"
+        order_direction = "DESC" if req.reverse else "ASC"
+
+        limit = max(req.limit, 0) if req.limit is not None else -1
+        offset = max(req.offset, 0)
+
+        total_cursor = self._conn.execute(
+            "SELECT COUNT(*) FROM chat_sessions WHERE project_id = ?",
+            (str(project_id),),
+        )
+        total: int = total_cursor.fetchone()[0]
+
+        query = _SESSIONS_QUERY.format(order_column=order_column, order_direction=order_direction)
+        cursor = self._conn.execute(query, (str(project_id), limit, offset))
+
+        results = []
+        for row in cursor.fetchall():
+            session = ChatSession(
+                id=ChatSessionID(row["id"]),
+                project_id=ProjectID(row["project_id"]),
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
+            )
+            preview = self._extract_preview(row["first_message_json"])
+            results.append(
+                ChatSessionListItem(
+                    session=session,
+                    message_count=row["message_count"],
+                    preview=preview,
+                )
+            )
+
+        if req.limit is None:
+            next_offset: int | None = None
+        else:
+            next_candidate = offset + limit
+            next_offset = next_candidate if next_candidate < total else None
+
+        return ChatSessionRetrievalResponse(results=results, total=total, next_offset=next_offset)
+
+    @staticmethod
+    def _extract_preview(first_message_json: str | None) -> str | None:
+        if not first_message_json:
+            return None
+        try:
+            message = _LLM_MESSAGE_TA.validate_python(json.loads(first_message_json))
+        except Exception:
+            return None
+        if message.get("role") != "user":
+            return None
+        text = "".join(part["text"] for part in message.get("parts", ()) if part["type"] == "text")
+        text = re.sub(r"\s+", " ", text).strip()
+        return text or None
+
+    def count_messages_by_session_id(
+        self,
+        session_id: ChatSessionID,
+        query: str | None = None,
+    ) -> int:
+        if not query:
+            cursor = self._conn.execute(_COUNT_MESSAGES_BY_SESSION, (int(session_id),))
+            return cursor.fetchone()[0]
+        cursor = self._conn.execute(
+            "SELECT message FROM chat_messages WHERE session_id = ?",
+            (int(session_id),),
+        )
+        return sum(
+            1
+            for row in cursor.fetchall()
+            if self._message_matches_query(_LLM_MESSAGE_TA.validate_python(json.loads(row["message"])), query)
+        )
+
+    def count_messages_by_project_id(
+        self,
+        project_id: ProjectID,
+        query: str | None = None,
+    ) -> int:
+        if not query:
+            cursor = self._conn.execute(_COUNT_MESSAGES_BY_PROJECT, (str(project_id),))
+            return cursor.fetchone()[0]
+        cursor = self._conn.execute(
+            """
+            SELECT m.message
+            FROM chat_messages AS m
+            INNER JOIN chat_sessions AS s ON s.id = m.session_id
+            WHERE s.project_id = ?
+            """,
+            (str(project_id),),
+        )
+        return sum(
+            1
+            for row in cursor.fetchall()
+            if self._message_matches_query(_LLM_MESSAGE_TA.validate_python(json.loads(row["message"])), query)
+        )
+
+    @staticmethod
+    def _message_matches_query(message: LLMMessage, query: str) -> bool:
+        query = query.strip().lower()
+        if not query:
+            return True
+        return any(part["text"].lower().find(query) >= 0 for part in message.get("parts", ()))
 
     def _build_chat_message(self, row: sqlite3.Row) -> ChatMessage:
         return ChatMessage(
