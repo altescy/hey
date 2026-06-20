@@ -17,6 +17,8 @@ from hey.application.dto import (
     GetLLMStateOutput,
     GetOrCreateSessionInput,
     GetOrCreateSessionOutput,
+    GetSessionListInput,
+    GetSessionListOutput,
     ResumeSessionInput,
     ResumeSessionOutput,
     RunChatInput,
@@ -146,6 +148,13 @@ class AgentChatUseCase[QueryT, ResponseT]:
     async def get_latest_session_by_project_id(self, project_id: ProjectID) -> ChatSession | None:
         return self._chat_repository.get_latest_session_by_project_id(project_id)
 
+    async def list_sessions(self, input: GetSessionListInput) -> GetSessionListOutput:
+        sessions = self._chat_repository.get_sessions_by_project_id(
+            input["project_id"],
+            request=input["request"],
+        )
+        return GetSessionListOutput(sessions=sessions)
+
     async def get_messages_by_session_id(
         self,
         session_id: ChatSessionID,
@@ -159,6 +168,20 @@ class AgentChatUseCase[QueryT, ResponseT]:
         request: ChatMessageRetrievalRequest | None = None,
     ) -> ChatMessageRetrievalResponse:
         return self._chat_repository.get_messages_by_project_id(project_id, request)
+
+    async def count_messages_by_session_id(
+        self,
+        session_id: ChatSessionID,
+        query: str | None = None,
+    ) -> int:
+        return self._chat_repository.count_messages_by_session_id(session_id, query)
+
+    async def count_messages_by_project_id(
+        self,
+        project_id: ProjectID,
+        query: str | None = None,
+    ) -> int:
+        return self._chat_repository.count_messages_by_project_id(project_id, query)
 
     async def compact(self, input: CompactChatInput) -> CompactChatOutput:
         return await self._compact_session(input["session_id"])

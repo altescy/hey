@@ -21,14 +21,23 @@ from ..display.chat import ChatDisplay
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("prompt", nargs="*", help="The prompt to send to the LLM.")
-    _add_options(parser)
-
-
-def _add_options(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--temporary", action="store_true", help="Use temporary in-memory storage for chat history.")
-    parser.add_argument("--compact", action="store_true", help="Compact the latest chat session and exit.")
     parser.add_argument(
-        "--new-session", action="store_true", help="Start a new chat session instead of resuming the latest one."
+        "-t",
+        "--temporary",
+        action="store_true",
+        help="Use temporary in-memory storage for chat history.",
+    )
+    parser.add_argument(
+        "-c",
+        "--compact",
+        action="store_true",
+        help="Compact the latest chat session and exit.",
+    )
+    parser.add_argument(
+        "-n",
+        "--new-session",
+        action="store_true",
+        help="Start a new chat session instead of resuming the latest one.",
     )
 
 

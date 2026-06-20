@@ -4,6 +4,7 @@ from typing import TypedDict
 from hey.domain.entities.chat import ChatSession, ChatSessionID
 from hey.domain.entities.llm import LLMState
 from hey.domain.entities.project import Project, ProjectID
+from hey.domain.repositories.chat import ChatSessionRetrievalRequest, ChatSessionRetrievalResponse
 
 
 class GetLLMStateInput(TypedDict):
@@ -60,3 +61,12 @@ class GetProjectInput(TypedDict):
 
 class GetProjectOutput(TypedDict):
     project: Project
+
+
+class GetSessionListInput(TypedDict):
+    project_id: ProjectID
+    request: ChatSessionRetrievalRequest | None
+
+
+class GetSessionListOutput(TypedDict):
+    sessions: ChatSessionRetrievalResponse
